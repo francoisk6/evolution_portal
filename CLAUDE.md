@@ -61,7 +61,7 @@ lib/
 \`\`\`
 
 ### State Management
-- TBD — update once confirmed (Riverpod / Provider / Bloc / setState)
+- Riverpod 2.x (flutter_riverpod: ^2.5.1)
 
 ### API Communication
 - Backend: andyQueen Django REST API
