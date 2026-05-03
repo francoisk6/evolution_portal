@@ -42,23 +42,26 @@ This is the UI project. Treat all visual output as locked unless the user says o
 ## Architecture Notes
 
 ### Directory Layout (expected)
+\`\`\`
 lib/
-main.dart
-app/              # App-level routing, theme, providers
-features/         # Feature-first folders (auth/, dashboard/, etc.)
-auth/
-screens/
-widgets/
-controllers/  # or providers/
-shared/
-widgets/        # Reusable UI components
-models/         # Shared data models
-services/       # API client, Firebase wrappers
-core/
-constants/
-utils/
+  main.dart
+  app/              # App-level routing, theme, providers
+  features/         # Feature-first folders (auth/, dashboard/, etc.)
+    auth/
+      screens/
+      widgets/
+      controllers/  # or providers/
+  shared/
+    widgets/        # Reusable UI components
+    models/         # Shared data models
+    services/       # API client, Firebase wrappers
+  core/
+    constants/
+    utils/
+\`\`\`
+
 ### State Management
-- [Fill in after /init — Riverpod / Provider / Bloc / setState?]
+- TBD — update once confirmed (Riverpod / Provider / Bloc / setState)
 
 ### API Communication
 - Backend: andyQueen Django REST API
