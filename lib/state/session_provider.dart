@@ -105,7 +105,8 @@ class SessionState extends ChangeNotifier {
         ? profile
         : (profile is Map ? profile.cast<String, dynamic>() : const <String, dynamic>{});
     final avatar = profileMap['avatar']?.toString();
-    await setAvatarUrl(avatar);
+    // Only update when the server returned the field; null means absent, not "no avatar".
+    if (avatar != null) await setAvatarUrl(avatar.isEmpty ? null : avatar);
     _applyUserFlags(data);
     notifyListeners();
   }

@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 
+enum AppEnvMode { dev, prod }
+
 class WorkspaceConfig {
   final String slug;
   final String displayName;
@@ -25,6 +27,9 @@ class WorkspaceConfig {
 class AppEnv {
   AppEnv._();
 
+  /// Switch to [AppEnvMode.dev] for local development, [AppEnvMode.prod] for release builds.
+  static const AppEnvMode envMode = AppEnvMode.prod;
+
   static const String _workspacePrefsKey = 'selected_workspace_slug';
 
   /// Public web root used by Flutter Web workspace auto-selection.
@@ -39,15 +44,16 @@ class AppEnv {
     WorkspaceConfig(
       slug: 'main',
       displayName: 'Main',
-      // For local development, switch this to your dev server if needed:
-      apiBaseUrl: 'http://localhost:8010',
-      //apiBaseUrl: 'https://api.evolution-portal.com',
+      apiBaseUrl: envMode == AppEnvMode.prod
+          ? 'https://api.evolution-portal.com'
+          : 'http://localhost:8010',
     ),
     WorkspaceConfig(
       slug: 'horizon',
       displayName: 'Horizon',
-      apiBaseUrl: 'http://192.168.150.101:8810',
-      //apiBaseUrl: 'https://horizonapi.evolution-portal.com',
+      apiBaseUrl: envMode == AppEnvMode.prod
+          ? 'https://horizonapi.evolution-portal.com'
+          : 'http://192.168.150.101:8810',
     ),
   ];
 

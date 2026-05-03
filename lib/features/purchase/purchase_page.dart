@@ -66,7 +66,7 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
   int _quantity = 0;
   String? _activeCurrency; // code (LBP/USD)
 
-  late final String _orderUuid = _uuidV4();
+  String _orderUuid = _uuidV4();
   int _reqSeq = 0;
 
   // Smaller, denser UI
@@ -1189,6 +1189,7 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
         ..addAll(sanitized);
     }
 
+    _orderUuid = _uuidV4();
     setState(() => _posting = true);
 
     try {
