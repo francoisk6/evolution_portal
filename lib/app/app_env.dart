@@ -28,7 +28,7 @@ class AppEnv {
   AppEnv._();
 
   /// Switch to [AppEnvMode.dev] for local development, [AppEnvMode.prod] for release builds.
-  static const AppEnvMode envMode = AppEnvMode.prod;
+  static const AppEnvMode envMode = AppEnvMode.dev;
 
   static const String _workspacePrefsKey = 'selected_workspace_slug';
 
@@ -46,7 +46,7 @@ class AppEnv {
       displayName: 'Main',
       apiBaseUrl: envMode == AppEnvMode.prod
           ? 'https://api.evolution-portal.com'
-          : 'http://localhost:8010',
+          : 'http://192.168.150.101:8010',
     ),
     WorkspaceConfig(
       slug: 'horizon',

@@ -484,7 +484,7 @@ class _MyDashboardPageState extends ConsumerState<MyDashboardPage> {
       return [
         _DashboardBlock(title: 'Top Sectors', items: data.topGroupHeads),
         _DashboardBlock(title: 'Top Categories', items: data.topGroupDetails),
-        _DashboardBlock(title: 'Top Products', items: data.topGroupSubdetails),
+        _DashboardBlock(title: 'Top Tabs', items: data.topGroupSubdetails),
         _DashboardBlock(title: 'Top Brands', items: data.topBrands),
       ].where((b) => b.items.isNotEmpty).toList(growable: false);
     }
@@ -493,6 +493,7 @@ class _MyDashboardPageState extends ConsumerState<MyDashboardPage> {
       if (data == null) return const [];
       return [
         _DashboardBlock(title: 'Top Users', items: data.topUsers),
+        _DashboardBlock(title: 'Top Admin Sectors', items: data.topSectors),
       ].where((b) => b.items.isNotEmpty).toList(growable: false);
     }
 
@@ -923,7 +924,7 @@ class _SelectedPerformanceCard extends StatelessWidget {
                   icon: Icons.check_circle_outline,
                 ),
                 _DashboardKpiTile(
-                  label: 'Best result',
+                  label: 'Best Sector',
                   value: metricLabel == 'Count'
                       ? bestEntry.value.toStringAsFixed(0)
                       : fmtValue(bestEntry.value),
