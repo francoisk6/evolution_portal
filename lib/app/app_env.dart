@@ -46,14 +46,14 @@ class AppEnv {
       displayName: 'Main',
       apiBaseUrl: envMode == AppEnvMode.prod
           ? 'https://api.evolution-portal.com'
-          : 'http://192.168.150.101:8010',
+          : 'http://localhost:8010',
     ),
     WorkspaceConfig(
       slug: 'horizon',
       displayName: 'Horizon',
       apiBaseUrl: envMode == AppEnvMode.prod
           ? 'https://horizonapi.evolution-portal.com'
-          : 'http://192.168.150.101:8810',
+          : 'http://localhost:8810',
     ),
   ];
 

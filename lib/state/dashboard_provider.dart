@@ -141,6 +141,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         dateFrom: _ymd(df),
         dateTo: _ymd(dt),
         currency: currency,
+        reportCurrency: selectedCode,
         status: status,
         top: top,
         userId: state.filters.userId,

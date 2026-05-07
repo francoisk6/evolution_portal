@@ -31,12 +31,27 @@ class _MyDashboardPageState extends ConsumerState<MyDashboardPage> {
   final _df = DateFormat('yyyy-MM-dd');
   DashboardMetric _metric = DashboardMetric.dealerProfit;
   bool _metricInitialized = false;
+  final _blockKeys = <String, GlobalKey>{};
 
   @override
   void initState() {
     super.initState();
     Future.microtask(() => ref.read(dashboardProvider.notifier).fetch());
   }
+
+  void _scrollToBlock(String title) {
+    final ctx = _blockKeys[title]?.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
+      alignment: 0.05,
+    );
+  }
+
+  GlobalKey _keyFor(String title) =>
+      _blockKeys.putIfAbsent(title, GlobalKey.new);
 
   Future<void> _openFilters() async {
     final st = ref.read(dashboardProvider);
@@ -389,6 +404,12 @@ class _MyDashboardPageState extends ConsumerState<MyDashboardPage> {
       }
     });
 
+    ref.listen<CurrencyState>(currencyProvider, (prev, next) {
+      if (prev?.selectedId != next.selectedId) {
+        ref.read(dashboardProvider.notifier).refresh();
+      }
+    });
+
     final st = ref.watch(dashboardProvider);
     final hideDealerPrice = ref.watch(sessionProvider).hideDealerPrice;
     final appCurrency = ref.watch(currencyProvider).selected.code;
@@ -543,6 +564,7 @@ class _MyDashboardPageState extends ConsumerState<MyDashboardPage> {
                             currencyCode: currencyCode,
                             fmtValue: (v) =>
                                 fmtValueFor(v, currencyCode: currencyCode),
+                            onBlockTap: _scrollToBlock,
                           ),
                         ],
                         const SizedBox(height: 12),
@@ -559,6 +581,7 @@ class _MyDashboardPageState extends ConsumerState<MyDashboardPage> {
                             (b) => Padding(
                               padding: const EdgeInsets.only(bottom: 12),
                               child: _DashboardBlockCard(
+                                key: _keyFor(b.title),
                                 title: b.title,
                                 items: b.items,
                                 metricLabel: metricLabelFor(),
@@ -588,6 +611,7 @@ class _MyDashboardPageState extends ConsumerState<MyDashboardPage> {
                             (b) => Padding(
                               padding: const EdgeInsets.only(bottom: 12),
                               child: _DashboardBlockCard(
+                                key: _keyFor(b.title),
                                 title: b.title,
                                 items: b.items,
                                 metricLabel: metricLabelFor(),
@@ -793,6 +817,7 @@ class _SelectedPerformanceCard extends StatelessWidget {
   final double Function(DashboardItem) metricValue;
   final String currencyCode;
   final String Function(num) fmtValue;
+  final void Function(String blockTitle)? onBlockTap;
 
   const _SelectedPerformanceCard({
     required this.blocks,
@@ -801,6 +826,7 @@ class _SelectedPerformanceCard extends StatelessWidget {
     required this.metricValue,
     required this.currencyCode,
     required this.fmtValue,
+    this.onBlockTap,
   });
 
   List<Color> _palette(BuildContext context) {
@@ -848,8 +874,6 @@ class _SelectedPerformanceCard extends StatelessWidget {
     if (entries.isEmpty) return const SizedBox.shrink();
 
     final bestEntry = entries.reduce((a, b) => a.value >= b.value ? a : b);
-    final totalValue =
-        entries.fold<double>(0, (p, e) => p + math.max(0, e.value));
 
     // Use server-provided totals (accurate, with currency conversion for ALL currencies)
     final grandTotal = serverTotals?.metricValue(metricLabel) ?? 0.0;
@@ -965,6 +989,7 @@ class _SelectedPerformanceCard extends StatelessWidget {
                             valueFormatter: (v) => metricLabel == 'Count'
                                 ? v.toStringAsFixed(0)
                                 : fmtValue(v),
+                            onBarTap: onBlockTap,
                           ),
                         ),
                       ),
@@ -973,24 +998,13 @@ class _SelectedPerformanceCard extends StatelessWidget {
                       width: panelWidth,
                       child: _ChartPanel(
                         title: 'Share distribution',
-                        subtitle: totalValue <= 0
-                            ? 'No positive values to split'
-                            : 'How each visible list contributes',
-                        child: SizedBox(
-                          height: 230,
-                          child: _DonutChartSection(
-                            data: chartData,
-                            totalValue: totalValue,
-                            centerLabel: metricLabel,
-                            centerValue: totalValue <= 0
-                                ? '0'
-                                : (metricLabel == 'Count'
-                                    ? totalValue.toStringAsFixed(0)
-                                    : fmtValue(totalValue)),
-                            valueFormatter: (v) => metricLabel == 'Count'
-                                ? v.toStringAsFixed(0)
-                                : fmtValue(v),
-                          ),
+                        subtitle: 'Select a list — top items + Others = grand total',
+                        child: _TabbedDonutSection(
+                          blocks: blocks,
+                          serverTotals: serverTotals,
+                          metricLabel: metricLabel,
+                          metricValue: metricValue,
+                          fmtValue: fmtValue,
                         ),
                       ),
                     ),
@@ -1215,10 +1229,12 @@ class _ChartPanel extends StatelessWidget {
 class _VerticalBarChart extends StatelessWidget {
   final List<_ChartDatum> data;
   final String Function(double) valueFormatter;
+  final void Function(String blockTitle)? onBarTap;
 
   const _VerticalBarChart({
     required this.data,
     required this.valueFormatter,
+    this.onBarTap,
   });
 
   @override
@@ -1235,69 +1251,72 @@ class _VerticalBarChart extends StatelessWidget {
       children: data
           .map(
             (datum) => Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      valueFormatter(datum.value),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
+              child: GestureDetector(
+                onTap: onBarTap != null ? () => onBarTap!(datum.label) : null,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        valueFormatter(datum.value),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.bottomCenter,
-                        child: FractionallySizedBox(
-                          heightFactor:
-                              (datum.value <= 0 ? 0.0 : (datum.value / denom))
-                                  .clamp(0.0, 1.0)
-                                  .toDouble(),
-                          widthFactor: 1,
-                          child: Container(
-                            constraints: const BoxConstraints(minHeight: 8),
-                            decoration: BoxDecoration(
-                              color: datum.color,
-                              borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(10),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: FractionallySizedBox(
+                            heightFactor:
+                                (datum.value <= 0 ? 0.0 : (datum.value / denom))
+                                    .clamp(0.0, 1.0)
+                                    .toDouble(),
+                            widthFactor: 1,
+                            child: Container(
+                              constraints: const BoxConstraints(minHeight: 8),
+                              decoration: BoxDecoration(
+                                color: datum.color,
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(10),
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      datum.label,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    if (datum.subtitle.trim().isNotEmpty) ...[
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 8),
                       Text(
-                        datum.subtitle,
-                        maxLines: 1,
+                        datum.label,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey.shade600,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
+                      if (datum.subtitle.trim().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          datum.subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -1307,7 +1326,7 @@ class _VerticalBarChart extends StatelessWidget {
   }
 }
 
-class _DonutChartSection extends StatelessWidget {
+class _DonutChartSection extends StatefulWidget {
   final List<_ChartDatum> data;
   final double totalValue;
   final String centerLabel;
@@ -1323,47 +1342,160 @@ class _DonutChartSection extends StatelessWidget {
   });
 
   @override
+  State<_DonutChartSection> createState() => _DonutChartSectionState();
+}
+
+class _DonutChartSectionState extends State<_DonutChartSection> {
+  int? _hoveredIndex;
+  Offset? _hoverPos;
+  double _paintSide = 0;
+
+  int? _hitTest(Offset pos) {
+    if (_paintSide <= 0 || widget.totalValue <= 0) return null;
+    final cx = _paintSide / 2;
+    final cy = _paintSide / 2;
+    final dx = pos.dx - cx;
+    final dy = pos.dy - cy;
+    final dist = math.sqrt(dx * dx + dy * dy);
+    final strokeWidth = math.max(14.0, _paintSide * 0.14);
+    final radius = _paintSide / 2 - strokeWidth / 2;
+    if (dist < radius - strokeWidth / 2 || dist > radius + strokeWidth / 2) {
+      return null;
+    }
+    // Angle from 12-o'clock clockwise, range [0, 2π)
+    final angle =
+        (math.atan2(dy, dx) + math.pi / 2 + 2 * math.pi) % (2 * math.pi);
+    double start = 0;
+    for (int i = 0; i < widget.data.length; i++) {
+      final v = widget.data[i].value;
+      if (v <= 0) continue;
+      final sweep = (v / widget.totalValue) * 2 * math.pi;
+      if (angle >= start && angle < start + sweep) return i;
+      start += sweep;
+    }
+    return null;
+  }
+
+  void _onHover(Offset pos) {
+    final idx = _hitTest(pos);
+    setState(() {
+      _hoveredIndex = idx;
+      _hoverPos = idx != null ? pos : null;
+    });
+  }
+
+  void _onExit() => setState(() {
+        _hoveredIndex = null;
+        _hoverPos = null;
+      });
+
+  Widget _buildTooltip(int index, Offset pos) {
+    if (index >= widget.data.length) return const SizedBox.shrink();
+    final datum = widget.data[index];
+    final share = widget.totalValue <= 0
+        ? 0.0
+        : (datum.value <= 0 ? 0.0 : datum.value) / widget.totalValue * 100;
+    final left =
+        pos.dx + 8 > _paintSide - 130 ? pos.dx - 138.0 : pos.dx + 8.0;
+    final top = pos.dy - 24 < 0 ? pos.dy + 8.0 : pos.dy - 24.0;
+    return Positioned(
+      left: left,
+      top: top,
+      child: IgnorePointer(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.black87,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                datum.label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${share.toStringAsFixed(1)}%  •  ${widget.valueFormatter(datum.value)}',
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final data = widget.data;
+    final totalValue = widget.totalValue;
+
     return Row(
       children: [
         Expanded(
           flex: 4,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              AspectRatio(
-                aspectRatio: 1,
-                child: CustomPaint(
-                  painter: _DonutChartPainter(
-                    data: data,
-                    totalValue: totalValue,
-                    baseColor: Colors.grey.shade200,
-                  ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              _paintSide = constraints.maxWidth;
+              return SizedBox.square(
+                dimension: _paintSide,
+                child: Stack(
+                  alignment: Alignment.center,
+                  clipBehavior: Clip.none,
+                  children: [
+                    MouseRegion(
+                      onHover: (e) => _onHover(e.localPosition),
+                      onExit: (_) => _onExit(),
+                      child: GestureDetector(
+                        onTapDown: (e) => _onHover(e.localPosition),
+                        onTapUp: (_) => _onExit(),
+                        child: CustomPaint(
+                          size: Size(_paintSide, _paintSide),
+                          painter: _DonutChartPainter(
+                            data: data,
+                            totalValue: totalValue,
+                            baseColor: Colors.grey.shade200,
+                            hoveredIndex: _hoveredIndex,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          widget.centerLabel,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.centerValue,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_hoveredIndex != null && _hoverPos != null)
+                      _buildTooltip(_hoveredIndex!, _hoverPos!),
+                  ],
                 ),
-              ),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    centerLabel,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey.shade700,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    centerValue,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              );
+            },
           ),
         ),
         const SizedBox(width: 12),
@@ -1407,7 +1539,7 @@ class _DonutChartSection extends StatelessWidget {
                                 ),
                               ),
                               Text(
-                                '${share.toStringAsFixed(1)}% • ${valueFormatter(datum.value)}',
+                                '${share.toStringAsFixed(1)}% • ${widget.valueFormatter(datum.value)}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
@@ -1436,44 +1568,83 @@ class _DonutChartPainter extends CustomPainter {
   final List<_ChartDatum> data;
   final double totalValue;
   final Color baseColor;
+  final int? hoveredIndex;
 
   const _DonutChartPainter({
     required this.data,
     required this.totalValue,
     required this.baseColor,
+    this.hoveredIndex,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final strokeWidth = math.max(14.0, size.shortestSide * 0.14);
     final rect = Offset.zero & size;
-    final arcRect = Rect.fromCircle(
-      center: rect.center,
-      radius: (math.min(size.width, size.height) / 2) - strokeWidth / 2,
+    final radius = (math.min(size.width, size.height) / 2) - strokeWidth / 2;
+    final arcRect = Rect.fromCircle(center: rect.center, radius: radius);
+
+    canvas.drawArc(
+      arcRect,
+      -math.pi / 2,
+      math.pi * 2,
+      false,
+      Paint()
+        ..color = baseColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.butt,
     );
-
-    final bgPaint = Paint()
-      ..color = baseColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.butt;
-
-    canvas.drawArc(arcRect, -math.pi / 2, math.pi * 2, false, bgPaint);
 
     if (data.isEmpty || totalValue <= 0) return;
 
-    var startAngle = -math.pi / 2;
+    // Precompute angles
+    final startAngles = <double>[];
+    final sweeps = <double>[];
+    var angle = -math.pi / 2;
     for (final datum in data) {
-      final cleanValue = datum.value <= 0 ? 0.0 : datum.value;
-      if (cleanValue <= 0) continue;
-      final sweep = (cleanValue / totalValue) * math.pi * 2;
-      final paint = Paint()
-        ..color = datum.color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth
-        ..strokeCap = StrokeCap.butt;
-      canvas.drawArc(arcRect, startAngle, sweep, false, paint);
-      startAngle += sweep;
+      startAngles.add(angle);
+      final v = datum.value <= 0 ? 0.0 : datum.value;
+      final sweep = v > 0 ? (v / totalValue) * math.pi * 2 : 0.0;
+      sweeps.add(sweep);
+      angle += sweep;
+    }
+
+    // First pass: non-hovered segments (dimmed when something is hovered)
+    for (int i = 0; i < data.length; i++) {
+      if (sweeps[i] <= 0 || i == hoveredIndex) continue;
+      canvas.drawArc(
+        arcRect,
+        startAngles[i],
+        sweeps[i],
+        false,
+        Paint()
+          ..color = hoveredIndex != null
+              ? data[i].color.withValues(alpha: 0.45)
+              : data[i].color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = strokeWidth
+          ..strokeCap = StrokeCap.butt,
+      );
+    }
+
+    // Second pass: hovered segment on top, slightly wider
+    if (hoveredIndex != null &&
+        hoveredIndex! < data.length &&
+        sweeps[hoveredIndex!] > 0) {
+      final hw = strokeWidth * 1.28;
+      final hr = (math.min(size.width, size.height) / 2) - hw / 2;
+      canvas.drawArc(
+        Rect.fromCircle(center: rect.center, radius: hr),
+        startAngles[hoveredIndex!],
+        sweeps[hoveredIndex!],
+        false,
+        Paint()
+          ..color = data[hoveredIndex!].color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = hw
+          ..strokeCap = StrokeCap.butt,
+      );
     }
   }
 
@@ -1481,7 +1652,118 @@ class _DonutChartPainter extends CustomPainter {
   bool shouldRepaint(covariant _DonutChartPainter oldDelegate) {
     return oldDelegate.data != data ||
         oldDelegate.totalValue != totalValue ||
-        oldDelegate.baseColor != baseColor;
+        oldDelegate.baseColor != baseColor ||
+        oldDelegate.hoveredIndex != hoveredIndex;
+  }
+}
+
+class _TabbedDonutSection extends StatefulWidget {
+  final List<_DashboardBlock> blocks;
+  final DashboardTotals? serverTotals;
+  final String metricLabel;
+  final double Function(DashboardItem) metricValue;
+  final String Function(num) fmtValue;
+
+  const _TabbedDonutSection({
+    required this.blocks,
+    required this.serverTotals,
+    required this.metricLabel,
+    required this.metricValue,
+    required this.fmtValue,
+  });
+
+  @override
+  State<_TabbedDonutSection> createState() => _TabbedDonutSectionState();
+}
+
+class _TabbedDonutSectionState extends State<_TabbedDonutSection> {
+  int _tab = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final blocks = widget.blocks;
+    if (blocks.isEmpty) return const SizedBox.shrink();
+
+    final tab = _tab.clamp(0, blocks.length - 1);
+    final block = blocks[tab];
+    final grandTotal = widget.serverTotals?.metricValue(widget.metricLabel) ?? 0.0;
+
+    final palette = [
+      Theme.of(context).colorScheme.primary,
+      Colors.teal.shade600,
+      Colors.orange.shade700,
+      Colors.purple.shade600,
+      Colors.indigo.shade500,
+      Colors.red.shade400,
+      Colors.green.shade600,
+      Colors.brown.shade500,
+    ];
+
+    final sortedItems = [...block.items]..sort(
+        (a, b) => widget.metricValue(b).compareTo(widget.metricValue(a)),
+      );
+    final chartData = <_ChartDatum>[];
+    double blockSum = 0;
+    for (int i = 0; i < sortedItems.length; i++) {
+      final v = math.max(0.0, widget.metricValue(sortedItems[i]));
+      blockSum += v;
+      chartData.add(_ChartDatum(
+        label: sortedItems[i].label,
+        subtitle: '',
+        value: v,
+        color: palette[i % palette.length],
+      ));
+    }
+
+    final others = grandTotal - blockSum;
+    if (others > 1) {
+      chartData.add(_ChartDatum(
+        label: 'Others',
+        subtitle: '',
+        value: others,
+        color: Colors.grey.shade400,
+      ));
+    }
+
+    final effectiveTotal = grandTotal > 0 ? grandTotal : blockSum;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: List.generate(blocks.length, (i) {
+              return Padding(
+                padding: EdgeInsets.only(right: i < blocks.length - 1 ? 6 : 0),
+                child: ChoiceChip(
+                  label: Text(
+                    blocks[i].title,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  selected: i == tab,
+                  visualDensity: VisualDensity.compact,
+                  onSelected: (_) => setState(() => _tab = i),
+                ),
+              );
+            }),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 200,
+          child: _DonutChartSection(
+            data: chartData,
+            totalValue: effectiveTotal,
+            centerLabel: widget.metricLabel,
+            centerValue: widget.metricLabel == 'Count'
+                ? effectiveTotal.toStringAsFixed(0)
+                : widget.fmtValue(effectiveTotal),
+            valueFormatter: widget.fmtValue,
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -1496,6 +1778,7 @@ class _DashboardBlockCard extends StatelessWidget {
   final bool hideDealerPrice;
 
   const _DashboardBlockCard({
+    super.key,
     required this.title,
     required this.items,
     required this.metricLabel,

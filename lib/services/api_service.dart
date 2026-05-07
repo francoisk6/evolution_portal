@@ -1697,6 +1697,7 @@ class ApiService {
     String? dateFrom,
     String? dateTo,
     String? currency,
+    String? reportCurrency,
     String? status,
     int top = 10,
     int? userId,
@@ -1708,6 +1709,8 @@ class ApiService {
       if (dateTo != null && dateTo.isNotEmpty) 'date_to': dateTo,
       if (currency != null && currency.trim().isNotEmpty)
         'currency': currency.trim().toUpperCase(),
+      if (reportCurrency != null && reportCurrency.trim().isNotEmpty)
+        'report_currency': reportCurrency.trim().toUpperCase(),
       if (status != null && status.trim().isNotEmpty) 'status': status.trim(),
       'top': '$safeTop',
       if (userId != null) 'user_id': '$userId',

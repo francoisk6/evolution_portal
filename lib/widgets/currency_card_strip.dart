@@ -440,10 +440,7 @@ class _CurrencyChip extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             MoneyFormat.format(amount, currencyCode: currency),
-            style: TextStyle(
-              fontSize: 12,
-              color: fg,
-            ),
+            style: TextStyle(fontSize: 12, color: fg),
           ),
         ]),
       ),
