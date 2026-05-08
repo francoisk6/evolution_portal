@@ -1694,7 +1694,8 @@ class _BalanceGrid extends StatelessWidget {
         state.items.any((e) => (e.username?.trim().isNotEmpty ?? false));
     final showLoadMore = state.hasMore && !state.loading;
 
-    return LayoutBuilder(
+    return SelectionArea(
+      child: LayoutBuilder(
       builder: (context, constraints) {
         final cols = <_BalanceGridCol>[
           _BalanceGridCol(
@@ -2052,6 +2053,7 @@ class _BalanceGrid extends StatelessWidget {
           ),
         );
       },
+    ),
     );
   }
 }

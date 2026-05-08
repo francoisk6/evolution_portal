@@ -2222,7 +2222,8 @@ class _TxGrid extends StatelessWidget {
         ),
     ];
 
-    return LayoutBuilder(
+    return SelectionArea(
+      child: LayoutBuilder(
       builder: (context, constraints) {
         const headerRed = Color(0xFFD32F2F);
         const headerBg = Color(0xFFFFF2F2);
@@ -2575,6 +2576,7 @@ class _TxGrid extends StatelessWidget {
           ),
         );
       },
+    ),
     );
   }
 }
