@@ -625,6 +625,7 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
   int? _sectorId;
   int? _categoryId;
   int? _productId;
+  String? _productPrefix;
   int? _productTypeId;
   int? _brandId;
   bool? _deactivated;
@@ -663,6 +664,41 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
     return items
         .map((e) => _ComboBoxOption<int>(value: e.id, label: e.label))
         .toList();
+  }
+
+  // Product options encode id or prefix as a String key so the dropdown
+  // can distinguish multiple prefix-group entries that all have id == 0.
+  List<_ComboBoxOption<String>> _productOptions(List<UserBrandProfitOption> products) {
+    return products.map((e) {
+      if (e.productPrefix != null) {
+        return _ComboBoxOption<String>(value: 'prefix:${e.productPrefix}', label: e.label);
+      }
+      return _ComboBoxOption<String>(value: 'id:${e.id}', label: e.label);
+    }).toList();
+  }
+
+  String? _productFilterKey() {
+    if (_productPrefix != null) return 'prefix:$_productPrefix';
+    if (_productId != null) return 'id:$_productId';
+    return null;
+  }
+
+  void _applyProductFilterKey(String? key) {
+    if (key == null) {
+      _productId = null;
+      _productPrefix = null;
+    } else if (key.startsWith('prefix:')) {
+      _productPrefix = key.substring(7);
+      _productId = null;
+    } else if (key.startsWith('id:')) {
+      _productId = int.tryParse(key.substring(3));
+      _productPrefix = null;
+    }
+  }
+
+  String _productFilterLabel(List<UserBrandProfitOption> products) {
+    if (_productPrefix != null) return _productPrefix!;
+    return _selectionLabel(products, _productId);
   }
 
   List<_ComboBoxOption<bool>> _deactivatedOptions() {
@@ -710,7 +746,11 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
     _userIds = _retainExistingOptionIds(next.users, _userIds);
     if (!_containsOption(next.sectors, _sectorId)) _sectorId = null;
     if (!_containsOption(next.categories, _categoryId)) _categoryId = null;
-    if (!_containsOption(next.products, _productId)) _productId = null;
+    if (_productPrefix != null) {
+      if (!next.products.any((e) => e.productPrefix == _productPrefix)) _productPrefix = null;
+    } else if (!_containsOption(next.products, _productId)) {
+      _productId = null;
+    }
     if (!_containsOption(next.productTypes, _productTypeId)) _productTypeId = null;
     if (!_containsOption(next.brands, _brandId)) _brandId = null;
   }
@@ -727,6 +767,7 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
         sectorId: _sectorId,
         categoryId: _categoryId,
         productId: _productId,
+        productPrefix: _productPrefix,
         productTypeId: _productTypeId,
         brandId: _brandId,
       );
@@ -759,6 +800,7 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
         sectorId: _sectorId,
         categoryId: _categoryId,
         productId: _productId,
+        productPrefix: _productPrefix,
         productTypeId: _productTypeId,
         brandId: _brandId,
         deactivated: _deactivated,
@@ -790,6 +832,7 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
       _sectorId = null;
       _categoryId = null;
       _productId = null;
+      _productPrefix = null;
       _productTypeId = null;
       _brandId = null;
       _deactivated = null;
@@ -868,9 +911,9 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
     await _loadList(page: 1);
   }
 
-  Future<void> _handleProductChanged(int? value) async {
+  Future<void> _handleProductChanged(String? key) async {
     setState(() {
-      _productId = value;
+      _applyProductFilterKey(key);
       _productTypeId = null;
       _brandId = null;
       _page = 1;
@@ -950,7 +993,7 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
     final brandScope = [
       if (_sectorId != null) 'sector',
       if (_categoryId != null) 'category',
-      if (_productId != null) 'product',
+      if (_productId != null || _productPrefix != null) 'product',
       if (_productTypeId != null) 'product type',
       if (_brandId != null) 'brand',
     ].join(', ');
@@ -977,6 +1020,7 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
         sectorId: _sectorId,
         categoryId: _categoryId,
         productId: _productId,
+        productPrefix: _productPrefix,
         productTypeId: _productTypeId,
         brandId: _brandId,
         profitPercentage: profit,
@@ -1284,7 +1328,9 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
     if (_categoryId != null) {
       add('Category', _selectionLabel(filters.categories, _categoryId));
     }
-    if (_productId != null) add('Product', _selectionLabel(filters.products, _productId));
+    if (_productId != null || _productPrefix != null) {
+      add('Product', _productFilterLabel(filters.products));
+    }
     if (_productTypeId != null) {
       add('Product type', _selectionLabel(filters.productTypes, _productTypeId));
     }
@@ -1473,11 +1519,11 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
                       ),
                     ),
                     box(
-                      _SearchableDropdownField<int>(
+                      _SearchableDropdownField<String>(
                         label: 'Product',
                         hintText: 'All products',
-                        value: _productId,
-                        options: _optionsFrom(filters?.products ?? const []),
+                        value: _productFilterKey(),
+                        options: _productOptions(filters?.products ?? const []),
                         onChanged: (v) {
                           _handleProductChanged(v);
                         },
@@ -1943,9 +1989,22 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
         ].whereType<String>().where((v) => v.trim().isNotEmpty).join(' / '),
       ),
       _UserBrandProfitGridCol(
+        key: 'native_cost',
+        label: 'Native Cost',
+        width: 90,
+        align: TextAlign.right,
+        cell: (e) => e.nativeCostPrice,
+        cellStyle: (_) => const TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF374151),
+          height: 1.15,
+        ),
+      ),
+      _UserBrandProfitGridCol(
         key: 'profit',
         label: 'Profit %',
-        width: 96,
+        width: 84,
         align: TextAlign.right,
         cell: (e) => e.profitPercentage,
         cellStyle: (_) => const TextStyle(
@@ -1956,15 +2015,54 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
         ),
       ),
       _UserBrandProfitGridCol(
+        key: 'dealer_price',
+        label: 'Dealer Price',
+        width: 90,
+        align: TextAlign.right,
+        cell: (e) => e.nativeDealerPrice,
+        cellStyle: (_) => const TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF374151),
+          height: 1.15,
+        ),
+      ),
+      _UserBrandProfitGridCol(
         key: 'selling',
         label: 'Selling %',
-        width: 96,
+        width: 84,
         align: TextAlign.right,
         cell: (e) => e.sellingProfitPercentage,
         cellStyle: (_) => const TextStyle(
           fontSize: 11.5,
           fontWeight: FontWeight.w900,
           color: Color(0xFF1E7E34),
+          height: 1.15,
+        ),
+      ),
+      _UserBrandProfitGridCol(
+        key: 'selling_price',
+        label: 'Selling Price',
+        width: 90,
+        align: TextAlign.right,
+        cell: (e) => e.nativeCustomerPrice,
+        cellStyle: (_) => const TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF374151),
+          height: 1.15,
+        ),
+      ),
+      _UserBrandProfitGridCol(
+        key: 'currency',
+        label: 'Currency',
+        width: 72,
+        align: TextAlign.center,
+        cell: (e) => e.brand?.currency ?? '-',
+        cellStyle: (_) => const TextStyle(
+          fontSize: 11.3,
+          fontWeight: FontWeight.w800,
+          color: Color(0xFF2563EB),
           height: 1.15,
         ),
       ),
@@ -2155,8 +2253,7 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
                   child: Text(
                     c.cell(item),
                     textAlign: c.align,
-                    maxLines: c.key == 'path' ? 2 : 1,
-                    overflow: TextOverflow.ellipsis,
+                    softWrap: true,
                     style: style,
                   ),
                 ),

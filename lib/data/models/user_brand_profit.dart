@@ -6,6 +6,7 @@ class UserBrandProfitOption {
   final String? fullName;
   final String? code;
   final String? currency;
+  final String? productPrefix;
 
   const UserBrandProfitOption({
     required this.id,
@@ -15,6 +16,7 @@ class UserBrandProfitOption {
     this.fullName,
     this.code,
     this.currency,
+    this.productPrefix,
   });
 
   factory UserBrandProfitOption.fromJson(Map<String, dynamic> json) {
@@ -29,6 +31,7 @@ class UserBrandProfitOption {
       fullName: json['full_name']?.toString(),
       code: json['code']?.toString(),
       currency: json['currency']?.toString(),
+      productPrefix: json['product_prefix']?.toString(),
     );
   }
 }
@@ -45,6 +48,7 @@ class UserBrandProfitItem {
   final String sellingProfitPercentage;
   final String roundDealerPrice;
   final String defaultSellingPrice;
+  final String nativeCostPrice;
   final String nativeDealerPrice;
   final String nativeCustomerPrice;
   final bool deactivated;
@@ -62,6 +66,7 @@ class UserBrandProfitItem {
     required this.sellingProfitPercentage,
     required this.roundDealerPrice,
     required this.defaultSellingPrice,
+    required this.nativeCostPrice,
     required this.nativeDealerPrice,
     required this.nativeCustomerPrice,
     required this.deactivated,
@@ -105,6 +110,7 @@ class UserBrandProfitItem {
       sellingProfitPercentage: json['selling_profit_percentage']?.toString() ?? '',
       roundDealerPrice: json['round_dealer_price']?.toString() ?? '',
       defaultSellingPrice: json['default_selling_price']?.toString() ?? '',
+      nativeCostPrice: json['native_cost_price']?.toString() ?? '',
       nativeDealerPrice: json['native_dealer_price']?.toString() ?? '',
       nativeCustomerPrice: json['native_customer_price']?.toString() ?? '',
       deactivated: asBool(json['deactivated']),

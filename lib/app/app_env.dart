@@ -28,7 +28,12 @@ class AppEnv {
   AppEnv._();
 
   /// Switch to [AppEnvMode.dev] for local development, [AppEnvMode.prod] for release builds.
+  /// **************************************************************************************
+
   static const AppEnvMode envMode = AppEnvMode.prod;
+
+  /// **************************************************************************************
+  /// **************************************************************************************
 
   static const String _workspacePrefsKey = 'selected_workspace_slug';
 
