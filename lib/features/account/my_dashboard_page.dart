@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../app/app_scroll_behavior.dart';
 import '../../data/models/dashboard_aggregates.dart';
 import '../../state/currency_provider.dart';
 import '../../state/dashboard_provider.dart';
@@ -134,21 +135,105 @@ class _MyDashboardPageState extends ConsumerState<MyDashboardPage> {
               ),
             ];
 
-            return Padding(
-              padding:
-                  EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxHeight: MediaQuery.of(ctx).size.height * 0.92,
-                    ),
-                    child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
+            void clearFilters() {
+              setModalState(() {
+                fromCtl.clear();
+                toCtl.clear();
+                currency = kDashboardCurrencyAll;
+                status = null;
+                topCtl.text = '10';
+                userIdCtl.clear();
+                userIdsCtl.clear();
+              });
+            }
+
+            void applyFilters() {
+              int? parseIntOrNull(String s) {
+                final t = s.trim();
+                if (t.isEmpty) return null;
+                return int.tryParse(t);
+              }
+
+              final top = int.tryParse(topCtl.text.trim()) ?? 10;
+              final userId = parseIntOrNull(userIdCtl.text);
+              final userIds = userIdsCtl.text.trim().isEmpty
+                  ? null
+                  : userIdsCtl.text.trim();
+              ref.read(dashboardProvider.notifier).setFilters(
+                DashboardFilters(
+                  from: parseYmd(fromCtl.text),
+                  to: parseYmd(toCtl.text),
+                  currency: currency,
+                  status: status,
+                  top: top,
+                  userId: userId,
+                  userIds: userIds,
+                ),
+              );
+              Navigator.of(ctx).pop();
+              ref.read(dashboardProvider.notifier).fetch();
+            }
+
+            Widget buildOverlayActions() {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  FloatingActionButton.small(
+                    heroTag: 'dash_filter_cancel',
+                    tooltip: 'Cancel',
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Icon(Icons.close),
+                  ),
+                  const SizedBox(height: 10),
+                  FloatingActionButton.small(
+                    heroTag: 'dash_filter_clear',
+                    tooltip: 'Clear',
+                    backgroundColor: Colors.white,
+                    foregroundColor: Theme.of(ctx).colorScheme.primary,
+                    onPressed: clearFilters,
+                    child: const Icon(Icons.backspace_outlined),
+                  ),
+                  const SizedBox(height: 10),
+                  FloatingActionButton.small(
+                    heroTag: 'dash_filter_apply',
+                    tooltip: 'Apply',
+                    onPressed: applyFilters,
+                    child: const Icon(Icons.check),
+                  ),
+                ],
+              );
+            }
+
+            return EvolutionPopupScrollScope(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(ctx).viewInsets.bottom,
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(ctx).size.height * 0.92,
+                      ),
+                      child: Focus(
+                        autofocus: true,
+                        child: Stack(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                right: 72,
+                                bottom: 12,
+                              ),
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
                           Row(
                             children: [
                               const Icon(Icons.dashboard_customize),
@@ -312,76 +397,17 @@ class _MyDashboardPageState extends ConsumerState<MyDashboardPage> {
                             ),
                             const SizedBox(height: 12),
                           ],
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: () {
-                                    setModalState(() {
-                                      fromCtl.clear();
-                                      toCtl.clear();
-                                      currency = kDashboardCurrencyAll;
-                                      status = null;
-                                      topCtl.text = '10';
-                                      userIdCtl.clear();
-                                      userIdsCtl.clear();
-                                    });
-                                  },
-                                  icon: const Icon(Icons.restart_alt, size: 18),
-                                  label: const Text(
-                                    'Reset',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed: () {
-                                    int? parseIntOrNull(String s) {
-                                      final t = s.trim();
-                                      if (t.isEmpty) return null;
-                                      return int.tryParse(t);
-                                    }
-
-                                    final top =
-                                        int.tryParse(topCtl.text.trim()) ?? 10;
-                                    final userId =
-                                        parseIntOrNull(userIdCtl.text);
-                                    final userIds =
-                                        userIdsCtl.text.trim().isEmpty
-                                            ? null
-                                            : userIdsCtl.text.trim();
-
-                                    ref
-                                        .read(dashboardProvider.notifier)
-                                        .setFilters(
-                                          DashboardFilters(
-                                            from: parseYmd(fromCtl.text),
-                                            to: parseYmd(toCtl.text),
-                                            currency: currency,
-                                            status: status,
-                                            top: top,
-                                            userId: userId,
-                                            userIds: userIds,
-                                          ),
-                                        );
-
-                                    Navigator.of(ctx).pop();
-                                    ref
-                                        .read(dashboardProvider.notifier)
-                                        .fetch();
-                                  },
-                                  icon: const Icon(Icons.check, size: 18),
-                                  label: const Text(
-                                    'Apply',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                            ),
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: buildOverlayActions(),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),

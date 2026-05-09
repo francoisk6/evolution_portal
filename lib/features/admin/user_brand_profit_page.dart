@@ -58,6 +58,7 @@ class _SearchableDropdownField<T> extends StatelessWidget {
       showDragHandle: true,
       builder: (sheetContext) {
         final searchCtl = TextEditingController();
+        final scrollCtl = ScrollController();
 
         return FractionallySizedBox(
           heightFactor: 0.72,
@@ -170,8 +171,11 @@ class _SearchableDropdownField<T> extends StatelessWidget {
                                   ),
                                 )
                               : Scrollbar(
+                                  controller: scrollCtl,
                                   thumbVisibility: true,
+                                  interactive: true,
                                   child: ListView.separated(
+                                    controller: scrollCtl,
                                     itemCount: filtered.length,
                                     separatorBuilder: (_, __) => Divider(
                                       height: 1,
@@ -327,6 +331,7 @@ class _SearchableMultiSelectField<T> extends StatelessWidget {
       showDragHandle: true,
       builder: (sheetContext) {
         final searchCtl = TextEditingController();
+        final scrollCtl = ScrollController();
         final selected = <T>{...values};
 
         return FractionallySizedBox(
@@ -461,8 +466,11 @@ class _SearchableMultiSelectField<T> extends StatelessWidget {
                                   ),
                                 )
                               : Scrollbar(
+                                  controller: scrollCtl,
                                   thumbVisibility: true,
+                                  interactive: true,
                                   child: ListView.separated(
+                                    controller: scrollCtl,
                                     itemCount: filtered.length,
                                     separatorBuilder: (_, __) => Divider(
                                       height: 1,
