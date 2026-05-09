@@ -26,6 +26,12 @@ CACHE_BUSTER="${APP_VERSION}-${BUILD_STAMP}"
 log "App version: $APP_VERSION"
 log "Build stamp: $BUILD_STAMP"
 
+APP_ENV_FILE="lib/app/app_env.dart"
+[ -f "$APP_ENV_FILE" ] || die "Cannot find $APP_ENV_FILE"
+grep -q 'envMode = AppEnvMode\.prod' "$APP_ENV_FILE" \
+  || die "$APP_ENV_FILE: envMode is not AppEnvMode.prod — set it before deploying"
+log "Confirmed: envMode = AppEnvMode.prod"
+
 log "Flutter clean..."
 "$FLUTTER_BIN" clean
 
