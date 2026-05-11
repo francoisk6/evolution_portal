@@ -17,6 +17,7 @@ import '../features/online/online_brand_selection_page.dart';
 import '../features/about/about_page.dart';
 import '../features/admin/user_brand_profit_page.dart';
 import '../features/admin/workspace_ops_page.dart';
+import '../features/admin/workspace_transaction_cleanup_page.dart';
 
 // Top-level singletons with labels (helps the console point to the right key if duplicated)
 final rootNavKey = GlobalKey<NavigatorState>(debugLabel: 'rootNav');
@@ -61,7 +62,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '${R.onlineBrands}/:groupDetailId',
             builder: (c, s) {
-              final id = int.tryParse(s.pathParameters['groupDetailId'] ?? '') ?? 0;
+              final id =
+                  int.tryParse(s.pathParameters['groupDetailId'] ?? '') ?? 0;
               final gsd = int.tryParse(s.uri.queryParameters['gsd'] ?? '');
               final productKey = (s.uri.queryParameters['q'] ?? '').trim();
               final searchMode = (s.uri.queryParameters['search'] ?? '').trim();
@@ -89,6 +91,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
               path: R.adminWorkspaceOps,
               builder: (c, s) => const WorkspaceOpsPage()),
+          GoRoute(
+              path: R.adminWorkspaceTransactionCleanup,
+              builder: (c, s) => const WorkspaceTransactionCleanupPage()),
         ],
       ),
     ],

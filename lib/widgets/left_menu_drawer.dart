@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../app/app_env.dart';
 import '../routing/route_names.dart';
 import '../state/app_info_provider.dart';
 import '../state/session_provider.dart';
@@ -15,6 +16,8 @@ class LeftMenuDrawer extends ConsumerWidget {
 
     final appAsync = ref.watch(appVersionProvider);
     final session = ref.watch(sessionProvider);
+    final showMainSuperuserTools = session.isSuperuser &&
+        AppEnv.selectedWorkspace.slug == AppEnv.defaultWorkspace.slug;
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Drawer(
@@ -105,6 +108,18 @@ class LeftMenuDrawer extends ConsumerWidget {
                             Navigator.pop(context);
                           },
                         ),
+                        if (showMainSuperuserTools)
+                          ListTile(
+                            leading:
+                                const Icon(Icons.cleaning_services_outlined),
+                            title: const Text('Workspace Transaction Cleanup'),
+                            selected:
+                                isRoute(R.adminWorkspaceTransactionCleanup),
+                            onTap: () {
+                              context.go(R.adminWorkspaceTransactionCleanup);
+                              Navigator.pop(context);
+                            },
+                          ),
                       ],
                     ),
                     const Divider(),

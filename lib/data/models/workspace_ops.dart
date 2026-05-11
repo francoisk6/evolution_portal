@@ -72,6 +72,59 @@ class WorkspaceAuditSummaryResponse {
   }
 }
 
+class WorkspaceListResponse {
+  final bool ok;
+  final int count;
+  final List<WorkspaceOption> workspaces;
+
+  const WorkspaceListResponse({
+    required this.ok,
+    required this.count,
+    required this.workspaces,
+  });
+
+  factory WorkspaceListResponse.fromJson(Map<String, dynamic> json) {
+    final workspaces = _listOfMaps(json['workspaces'])
+        .map(WorkspaceOption.fromJson)
+        .toList(growable: false);
+    return WorkspaceListResponse(
+      ok: _asBool(json['ok']),
+      count: _asInt(json['count']) ?? workspaces.length,
+      workspaces: workspaces,
+    );
+  }
+}
+
+class WorkspaceOption {
+  final String slug;
+  final String name;
+  final String? domain;
+  final bool active;
+  final int? mainDealerUserId;
+  final String? mainDealerUsername;
+
+  const WorkspaceOption({
+    required this.slug,
+    required this.name,
+    this.domain,
+    required this.active,
+    this.mainDealerUserId,
+    this.mainDealerUsername,
+  });
+
+  factory WorkspaceOption.fromJson(Map<String, dynamic> json) {
+    final slug = json['slug']?.toString() ?? '';
+    return WorkspaceOption(
+      slug: slug,
+      name: json['name']?.toString() ?? slug,
+      domain: json['domain']?.toString(),
+      active: _asBool(json['active']),
+      mainDealerUserId: _asInt(json['main_dealer_user_id']),
+      mainDealerUsername: json['main_dealer_username']?.toString(),
+    );
+  }
+}
+
 Map<String, dynamic> _map(dynamic value) {
   if (value is Map<String, dynamic>) return value;
   if (value is Map) return value.cast<String, dynamic>();
@@ -80,7 +133,10 @@ Map<String, dynamic> _map(dynamic value) {
 
 List<Map<String, dynamic>> _listOfMaps(dynamic value) {
   if (value is! List) return const <Map<String, dynamic>>[];
-  return value.map((item) => _map(item)).where((item) => item.isNotEmpty).toList();
+  return value
+      .map((item) => _map(item))
+      .where((item) => item.isNotEmpty)
+      .toList();
 }
 
 bool _asBool(dynamic value) {
@@ -88,4 +144,10 @@ bool _asBool(dynamic value) {
   if (value is num) return value != 0;
   final s = value?.toString().trim().toLowerCase() ?? '';
   return s == 'true' || s == '1' || s == 'yes' || s == 'y';
+}
+
+int? _asInt(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '');
 }

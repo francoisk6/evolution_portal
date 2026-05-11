@@ -1797,13 +1797,19 @@ class ApiService {
     return _sendJsonMap(url, method: 'GET', auth: true);
   }
 
+  Future<Map<String, dynamic>> getWorkspaces() {
+    final url = Uri.parse('${AppEnv.base}account/workspaces/');
+    return _sendJsonMap(url, method: 'GET', auth: true);
+  }
+
   Future<Map<String, dynamic>> getWorkspaceAuditSummary({
     bool verifyRemote = false,
     int limit = 200,
     int sampleLimit = 20,
   }) {
     final safeLimit = limit < 1 ? 1 : (limit > 10000 ? 10000 : limit);
-    final safeSampleLimit = sampleLimit < 1 ? 1 : (sampleLimit > 500 ? 500 : sampleLimit);
+    final safeSampleLimit =
+        sampleLimit < 1 ? 1 : (sampleLimit > 500 ? 500 : sampleLimit);
     final qp = <String, String>{
       if (verifyRemote) 'verify_remote': '1',
       'limit': '$safeLimit',
@@ -1812,6 +1818,25 @@ class ApiService {
     final url = Uri.parse('${AppEnv.base}account/workspace-audit-summary/')
         .replace(queryParameters: qp);
     return _sendJsonMap(url, method: 'GET', auth: true);
+  }
+
+  Future<Map<String, dynamic>> workspaceTransactionCleanup({
+    required String workspaceSlug,
+    required int localTransactionId,
+    required bool dryRun,
+  }) {
+    final url =
+        Uri.parse('${AppEnv.base}account/workspace-transaction-cleanup/');
+    return _sendJsonMap(
+      url,
+      method: 'POST',
+      auth: true,
+      body: <String, dynamic>{
+        'workspace_slug': workspaceSlug.trim(),
+        'local_transaction_id': localTransactionId,
+        'dry_run': dryRun,
+      },
+    );
   }
 
   // ───────────────── ONLINE / USER BRAND PROFIT ─────────────────

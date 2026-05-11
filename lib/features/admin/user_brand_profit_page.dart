@@ -1,3 +1,4 @@
+import 'dart:convert' show utf8;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/user_brand_profit.dart';
 import '../../services/user_brand_profit_service.dart';
 import '../../state/session_provider.dart';
+import '../../utils/file_download.dart';
+import '../../utils/money_format.dart';
 import '../../widgets/page_action_bar.dart' show PageAction, PageActions;
 
 class _ComboBoxOption<T> {
@@ -613,11 +616,15 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
   final _hListCtl = ScrollController();
 
   UserBrandProfitFilterOptionsResponse? _filters;
-  UserBrandProfitListResponse? _listResponse;
+  List<UserBrandProfitItem> _items = const <UserBrandProfitItem>[];
+  bool _hasMore = false;
+  bool _loadingMore = false;
+  int _total = 0;
 
   bool _loadingFilters = false;
   bool _loadingList = false;
   bool _submittingBulk = false;
+  bool _exportingCsv = false;
   String? _error;
 
   int? _groupId;
@@ -637,6 +644,8 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
   @override
   void initState() {
     super.initState();
+    _vListCtl.addListener(() => _onScroll(_vListCtl));
+    _pageCtl.addListener(() => _onScroll(_pageCtl));
     Future.microtask(_bootstrap);
   }
 
@@ -786,6 +795,46 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
     }
   }
 
+  void _onScroll(ScrollController ctl) {
+    if (!ctl.hasClients) return;
+    final pos = ctl.position;
+    if (pos.maxScrollExtent <= 0) return;
+    if (pos.pixels >= pos.maxScrollExtent * 0.7) _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingList || _loadingMore || !_hasMore) return;
+    setState(() => _loadingMore = true);
+    try {
+      final response = await _service.list(
+        groupId: _groupId,
+        userIds: _userIds,
+        sectorId: _sectorId,
+        categoryId: _categoryId,
+        productId: _productId,
+        productPrefix: _productPrefix,
+        productTypeId: _productTypeId,
+        brandId: _brandId,
+        deactivated: _deactivated,
+        search: _searchCtl.text.trim(),
+        page: _page + 1,
+        pageSize: _pageSize,
+      );
+      if (!mounted) return;
+      setState(() {
+        _page++;
+        _items = [..._items, ...response.items];
+        _hasMore = response.hasNext;
+        _total = response.total;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = _cleanError(e));
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
   Future<void> _loadList({int? page}) async {
     setState(() {
       _loadingList = true;
@@ -809,20 +858,22 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
         pageSize: _pageSize,
       );
       if (!mounted) return;
-      setState(() => _listResponse = response);
+      setState(() {
+        _items = response.items;
+        _hasMore = response.hasNext;
+        _total = response.total;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = _cleanError(e));
     } finally {
-      if (mounted) {
-        setState(() => _loadingList = false);
-      }
+      if (mounted) setState(() => _loadingList = false);
     }
   }
 
   Future<void> _refreshAll() async {
     await _loadFilters();
-    await _loadList(page: _page);
+    await _loadList(page: 1);
   }
 
   Future<void> _clearFilters() async {
@@ -847,6 +898,109 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
     final s = e.toString();
     if (s.startsWith('Exception: ')) return s.substring('Exception: '.length);
     return s;
+  }
+
+  String _displayCostPrice(UserBrandProfitItem item) {
+    final cost = MoneyFormat.tryParse(item.nativeCostPrice);
+    if (cost == null || cost == 0) {
+      return item.nativeCostPrice.isEmpty ? '-' : item.nativeCostPrice;
+    }
+    return MoneyFormat.format(cost, currencyCode: item.brand?.currency ?? '');
+  }
+
+  String _displayDealerPrice(UserBrandProfitItem item) {
+    final cost = MoneyFormat.tryParse(item.nativeCostPrice);
+    final profit = MoneyFormat.tryParse(item.profitPercentage);
+    if (cost == null || profit == null || cost == 0) return '-';
+    return MoneyFormat.format(cost * profit, currencyCode: item.brand?.currency ?? '');
+  }
+
+  String _displaySellingPrice(UserBrandProfitItem item) {
+    final cost = MoneyFormat.tryParse(item.nativeCostPrice);
+    final profit = MoneyFormat.tryParse(item.profitPercentage);
+    final selling = MoneyFormat.tryParse(item.sellingProfitPercentage);
+    if (cost == null || profit == null || selling == null || cost == 0) return '-';
+    return MoneyFormat.format(
+      cost * profit * selling,
+      currencyCode: item.brand?.currency ?? '',
+    );
+  }
+
+  static String _csvEscape(String value) {
+    if (value.contains(',') || value.contains('"') || value.contains('\n')) {
+      return '"${value.replaceAll('"', '""')}"';
+    }
+    return value;
+  }
+
+  Future<void> _exportCsv() async {
+    setState(() => _exportingCsv = true);
+    try {
+      const batchSize = 200;
+      final allItems = <UserBrandProfitItem>[];
+      var page = 1;
+      while (true) {
+        final response = await _service.list(
+          groupId: _groupId,
+          userIds: _userIds,
+          sectorId: _sectorId,
+          categoryId: _categoryId,
+          productId: _productId,
+          productPrefix: _productPrefix,
+          productTypeId: _productTypeId,
+          brandId: _brandId,
+          deactivated: _deactivated,
+          search: _searchCtl.text.trim(),
+          page: page,
+          pageSize: batchSize,
+        );
+        allItems.addAll(response.items);
+        if (!response.hasNext || response.items.isEmpty) break;
+        page++;
+      }
+      final rows = <List<String>>[
+        [
+          'User', 'Brand', 'Code', 'Currency',
+          'Sector', 'Category', 'Product', 'Product Type',
+          'Native Cost', 'Profit %', 'Dealer Price', 'Selling %', 'Selling Price',
+          'Status',
+        ],
+        for (final item in allItems) () {
+          final cost = MoneyFormat.tryParse(item.nativeCostPrice);
+          final profit = MoneyFormat.tryParse(item.profitPercentage);
+          final selling = MoneyFormat.tryParse(item.sellingProfitPercentage);
+          final dealerRaw = (cost != null && profit != null) ? cost * profit : null;
+          final sellingRaw = (dealerRaw != null && selling != null) ? dealerRaw * selling : null;
+          return [
+            item.user?.label ?? '',
+            item.brand?.label ?? '',
+            item.brand?.code ?? '',
+            item.brand?.currency ?? '',
+            item.sector?.label ?? '',
+            item.category?.label ?? '',
+            item.product?.label ?? '',
+            item.productType?.label ?? '',
+            item.nativeCostPrice,
+            item.profitPercentage,
+            dealerRaw?.toStringAsFixed(4) ?? '',
+            item.sellingProfitPercentage,
+            sellingRaw?.toStringAsFixed(4) ?? '',
+            item.deactivated ? 'Deactivated' : 'Active',
+          ];
+        }(),
+      ];
+      final csv = rows.map((r) => r.map(_csvEscape).join(',')).join('\r\n');
+      await saveDownloadedFile(
+        bytes: utf8.encode(csv),
+        filename: 'user_brand_profit_export.csv',
+        mimeType: 'text/csv',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showSnack(_cleanError(e));
+    } finally {
+      if (mounted) setState(() => _exportingCsv = false);
+    }
   }
 
   String _selectionLabel(List<UserBrandProfitOption> items, int? id) {
@@ -1080,7 +1234,7 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
       await _service.delete(item.id);
       if (!mounted) return;
       _showSnack('Override deleted.');
-      await _loadList(page: _page);
+      await _loadList(page: 1);
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = _cleanError(e));
@@ -1294,6 +1448,23 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
                     },
               icon: const Icon(Icons.filter_alt_off, size: 18),
               label: const Text('Clear', style: TextStyle(fontSize: 12)),
+            ),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+              onPressed: _exportingCsv ? null : _exportCsv,
+              icon: _exportingCsv
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.download_outlined, size: 18),
+              label: Text(
+                _exportingCsv ? 'Exporting…' : 'Export CSV',
+                style: const TextStyle(fontSize: 12),
+              ),
             ),
             FilledButton.icon(
               style: FilledButton.styleFrom(
@@ -1691,8 +1862,7 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
   }
 
   Widget _buildListCard(BuildContext context) {
-    final response = _listResponse;
-    final items = response?.items ?? const <UserBrandProfitItem>[];
+    final items = _items;
 
     return _sectionCard(
       child: Padding(
@@ -1713,7 +1883,7 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
                   ),
                 ),
                 Text(
-                  'Page ${response?.page ?? _page} • Total ${response?.total ?? 0}',
+                  'Total $_total',
                   style: TextStyle(
                     fontSize: 11.5,
                     color: _fgSoft,
@@ -1755,35 +1925,24 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
                   return _buildDesktopTable(context, items, constraints.maxWidth);
                 },
               ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                Text(
+                  'Showing ${_items.length} of $_total',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: _fgSoft,
+                    fontWeight: FontWeight.w600,
                   ),
-                  onPressed: (_loadingList || !(response?.hasPrevious ?? (_page > 1)))
-                      ? null
-                      : () {
-                          _loadList(page: _page - 1);
-                        },
-                  icon: const Icon(Icons.chevron_left, size: 18),
-                  label: const Text('Previous', style: TextStyle(fontSize: 12)),
                 ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                if (_loadingMore)
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   ),
-                  onPressed: (_loadingList || !(response?.hasNext ?? false))
-                      ? null
-                      : () {
-                          _loadList(page: _page + 1);
-                        },
-                  icon: const Icon(Icons.chevron_right, size: 18),
-                  label: const Text('Next', style: TextStyle(fontSize: 12)),
-                ),
               ],
             ),
           ],
@@ -1993,7 +2152,7 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
         label: 'Native Cost',
         width: 90,
         align: TextAlign.right,
-        cell: (e) => e.nativeCostPrice,
+        cell: (e) => _displayCostPrice(e),
         cellStyle: (_) => const TextStyle(
           fontSize: 11.5,
           fontWeight: FontWeight.w700,
@@ -2019,7 +2178,7 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
         label: 'Dealer Price',
         width: 90,
         align: TextAlign.right,
-        cell: (e) => e.nativeDealerPrice,
+        cell: (e) => _displayDealerPrice(e),
         cellStyle: (_) => const TextStyle(
           fontSize: 11.5,
           fontWeight: FontWeight.w700,
@@ -2045,7 +2204,7 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
         label: 'Selling Price',
         width: 90,
         align: TextAlign.right,
-        cell: (e) => e.nativeCustomerPrice,
+        cell: (e) => _displaySellingPrice(e),
         cellStyle: (_) => const TextStyle(
           fontSize: 11.5,
           fontWeight: FontWeight.w700,
@@ -2348,6 +2507,9 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
       }),
       PageAction(label: 'Clear', icon: Icons.filter_alt_off, onTap: () {
         _clearFilters();
+      }),
+      PageAction(label: 'Export CSV', icon: Icons.download_outlined, onTap: () {
+        _exportCsv();
       }),
     ];
 
