@@ -1909,9 +1909,10 @@ class ApiService {
     String? productPrefix,
     int? productTypeId,
     int? brandId,
-    required String profitPercentage,
-    required String sellingProfitPercentage,
+    String? profitPercentage,
+    String? sellingProfitPercentage,
     bool overrideExisting = false,
+    bool useStandardPercentage = false,
   }) {
     final url = Uri.parse('${AppEnv.onlineBase}user-brand-profit/bulk-upsert/');
     return _sendJsonMap(
@@ -1928,8 +1929,11 @@ class ApiService {
         if (productPrefix != null) 'product_prefix': productPrefix,
         if (productTypeId != null) 'product_type_id': productTypeId,
         if (brandId != null) 'brand_id': brandId,
-        'profit_percentage': profitPercentage.trim(),
-        'selling_profit_percentage': sellingProfitPercentage.trim(),
+        if (!useStandardPercentage && profitPercentage != null)
+          'profit_percentage': profitPercentage.trim(),
+        if (!useStandardPercentage && sellingProfitPercentage != null)
+          'selling_profit_percentage': sellingProfitPercentage.trim(),
+        if (useStandardPercentage) 'use_standard_percentage': true,
         'override_existing': overrideExisting,
       },
     );

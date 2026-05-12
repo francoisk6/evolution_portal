@@ -624,6 +624,7 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
   bool _loadingFilters = false;
   bool _loadingList = false;
   bool _submittingBulk = false;
+  bool _submittingStandard = false;
   bool _exportingCsv = false;
   String? _error;
 
@@ -1134,6 +1135,84 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
     return result == true;
   }
 
+  Future<void> _submitStandardUpsert() async {
+    final scope = _targetLabel();
+    final brandScope = [
+      if (_sectorId != null) 'sector',
+      if (_categoryId != null) 'category',
+      if (_productId != null || _productPrefix != null) 'product',
+      if (_productTypeId != null) 'product type',
+      if (_brandId != null) 'brand',
+    ].join(', ');
+
+    final message = _groupId == null && _userIds.isEmpty
+        ? 'This will target ALL active users using standard percentages. Continue?'
+        : 'Target: $scope\n\nApply standard percentages?';
+
+    final confirmed = await _confirmDialog(
+      title: 'Apply standard percentages',
+      message: brandScope.isEmpty ? message : '$message\n\nBrand filters: $brandScope',
+    );
+    if (!confirmed) return;
+
+    setState(() {
+      _submittingStandard = true;
+      _error = null;
+    });
+
+    try {
+      final response = await _service.bulkUpsert(
+        groupId: _groupId,
+        userIds: _userIds,
+        sectorId: _sectorId,
+        categoryId: _categoryId,
+        productId: _productId,
+        productPrefix: _productPrefix,
+        productTypeId: _productTypeId,
+        brandId: _brandId,
+        overrideExisting: _overrideExisting,
+        useStandardPercentage: true,
+      );
+      if (!mounted) return;
+
+      final summary = response.summary;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Standard percentages applied'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(response.message),
+              const SizedBox(height: 12),
+              Text('Target users: ${summary['target_user_count'] ?? 0}'),
+              Text('Matched brands: ${summary['matched_brand_count'] ?? 0}'),
+              Text('Created: ${summary['created_count'] ?? 0}'),
+              Text('Updated: ${summary['updated_count'] ?? 0}'),
+              Text('Skipped existing: ${summary['skipped_existing_count'] ?? 0}'),
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+
+      await _loadFilters();
+      await _loadList(page: 1);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = _cleanError(e));
+      _showSnack(_cleanError(e));
+    } finally {
+      if (mounted) setState(() => _submittingStandard = false);
+    }
+  }
+
   Future<void> _submitBulkUpsert() async {
     final profit = _profitCtl.text.trim();
     final selling = _sellingProfitCtl.text.trim();
@@ -1342,7 +1421,7 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
                               },
                             );
                             if (!mounted) return;
-                            Navigator.of(context).pop();
+                            if (ctx.mounted) Navigator.pop(ctx);
                             _showSnack('Override updated.');
                             await _loadList(page: _page);
                           } catch (e) {
@@ -1837,23 +1916,37 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
               onChanged: _submittingBulk ? null : (v) => setState(() => _overrideExisting = v),
             ),
             const SizedBox(height: 6),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  ),
+                  onPressed: _submittingBulk || _submittingStandard
+                      ? null
+                      : _submitStandardUpsert,
+                  icon: const Icon(Icons.percent, size: 18),
+                  label: Text(
+                    _submittingStandard ? 'Applying…' : 'Use Standard %',
+                    style: const TextStyle(fontSize: 12),
+                  ),
                 ),
-                onPressed: _submittingBulk
-                  ? null
-                  : () {
-                      _submitBulkUpsert();
-                    },
-                icon: const Icon(Icons.playlist_add_check_circle_outlined, size: 18),
-                label: Text(
-                  _submittingBulk ? 'Applying…' : 'Apply bulk override',
-                  style: const TextStyle(fontSize: 12),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  ),
+                  onPressed: _submittingBulk || _submittingStandard
+                      ? null
+                      : _submitBulkUpsert,
+                  icon: const Icon(Icons.playlist_add_check_circle_outlined, size: 18),
+                  label: Text(
+                    _submittingBulk ? 'Applying…' : 'Apply bulk override',
+                    style: const TextStyle(fontSize: 12),
+                  ),
                 ),
-              ),
+              ],
             ),
           ],
         ),
@@ -2027,9 +2120,11 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
                         ),
                         const SizedBox(width: 10),
                         _UserBrandProfitValuePill(
-                          label: 'Profit',
-                          value: item.profitPercentage,
-                          color: const Color(0xFF1E7E34),
+                          label: 'Currency',
+                          value: (item.brand?.currency ?? '').isNotEmpty
+                              ? item.brand!.currency!
+                              : '-',
+                          color: const Color(0xFF2563EB),
                         ),
                       ],
                     ),
@@ -2039,25 +2134,35 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
                       runSpacing: 8,
                       children: [
                         _UserBrandProfitMetaChip(
-                          label: 'Selling',
+                          label: 'Cost',
+                          value: _displayCostPrice(item),
+                          textColor: const Color(0xFFD32F2F),
+                          borderColor: const Color(0xFFD32F2F),
+                        ),
+                        _UserBrandProfitMetaChip(
+                          label: 'Profit %',
+                          value: item.profitPercentage,
+                          textColor: const Color(0xFF1E7E34),
+                          borderColor: const Color(0xFF1E7E34),
+                        ),
+                        _UserBrandProfitMetaChip(
+                          label: 'Dealer',
+                          value: _displayDealerPrice(item),
+                          textColor: const Color(0xFFD32F2F),
+                          borderColor: const Color(0xFFD32F2F),
+                        ),
+                        _UserBrandProfitMetaChip(
+                          label: 'Selling %',
                           value: item.sellingProfitPercentage,
                           textColor: const Color(0xFF1E7E34),
                           borderColor: const Color(0xFF1E7E34),
                         ),
-                        if ((item.brand?.code ?? '').isNotEmpty)
-                          _UserBrandProfitMetaChip(
-                            label: 'Code',
-                            value: item.brand?.code ?? '',
-                            textColor: const Color(0xFFD32F2F),
-                            borderColor: const Color(0xFFD32F2F),
-                          ),
-                        if ((item.brand?.currency ?? '').isNotEmpty)
-                          _UserBrandProfitMetaChip(
-                            label: 'Currency',
-                            value: item.brand?.currency ?? '',
-                            textColor: const Color(0xFF2563EB),
-                            borderColor: const Color(0xFF2563EB),
-                          ),
+                        _UserBrandProfitMetaChip(
+                          label: 'Customer',
+                          value: _displaySellingPrice(item),
+                          textColor: const Color(0xFFD32F2F),
+                          borderColor: const Color(0xFFD32F2F),
+                        ),
                         _UserBrandProfitMetaChip(
                           label: 'Status',
                           value: item.deactivated ? 'Deactivated' : 'Active',
@@ -2517,7 +2622,11 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
       return _buildAccessDenied(context);
     }
 
-    return PageActions(
+    return MouseRegion(
+      cursor: (_submittingBulk || _submittingStandard)
+          ? SystemMouseCursors.wait
+          : MouseCursor.defer,
+      child: PageActions(
       actions: actions,
       child: ScrollConfiguration(
         behavior: const EvolutionScrollBehavior(showScrollbars: false),
@@ -2576,6 +2685,7 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
           ),
         ),
       ),
+    ),
     );
   }
 }

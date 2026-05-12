@@ -69,9 +69,10 @@ class UserBrandProfitService {
     String? productPrefix,
     int? productTypeId,
     int? brandId,
-    required String profitPercentage,
-    required String sellingProfitPercentage,
+    String? profitPercentage,
+    String? sellingProfitPercentage,
     bool overrideExisting = false,
+    bool useStandardPercentage = false,
   }) async {
     final m = await ApiService.instance.bulkUpsertUserBrandProfit(
       groupId: groupId,
@@ -86,6 +87,7 @@ class UserBrandProfitService {
       profitPercentage: profitPercentage,
       sellingProfitPercentage: sellingProfitPercentage,
       overrideExisting: overrideExisting,
+      useStandardPercentage: useStandardPercentage,
     );
     return UserBrandProfitBulkUpsertResponse.fromJson(m);
   }
