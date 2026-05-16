@@ -107,11 +107,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       final updated = _accountFromMe(me, fallbackUsername: acc.username);
       await _accountsStore.upsertAccount(updated);
       await _accountsStore.setActiveUsername(updated.username);
-
-      if (!mounted) return;
-      context.go(R.home);
     } catch (e) {
-      setState(() => _error = _cleanError(e));
+      if (mounted) setState(() => _error = _cleanError(e));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -187,13 +184,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         await _accountsStore.upsertAccount(acc);
         await _accountsStore.writeToken(acc.username, token);
         await _accountsStore.setActiveUsername(acc.username);
+        if (!mounted) return;
         await _loadAccounts();
       }
-
-      if (!mounted) return;
-      context.go(R.home);
     } catch (e) {
-      setState(() => _error = _cleanError(e));
+      if (mounted) setState(() => _error = _cleanError(e));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
