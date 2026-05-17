@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/api_service.dart';
+import 'session_provider.dart';
 
 class HomeDetail {
   final int id;
@@ -44,17 +45,31 @@ class HomeSection {
 }
 
 class GroupsNotifier extends StateNotifier<AsyncValue<List<HomeSection>>> {
+  final Ref _ref;
   bool _loadedWhileAuthenticated = false;
 
-  GroupsNotifier() : super(const AsyncValue.loading()) {
-    // Auto-load as soon as the provider is first read.
+  GroupsNotifier(this._ref) : super(const AsyncValue.loading()) {
+    // ChangeNotifierProvider gives the same mutated object for prev and next,
+    // so track the previous loggedIn value ourselves in a closure bool.
+    var prevLoggedIn = _ref.read(sessionProvider).loggedIn;
+    _ref.listen<SessionState>(sessionProvider, (_, next) {
+      final wasLoggedIn = prevLoggedIn;
+      prevLoggedIn = next.loggedIn;
+      if (wasLoggedIn && !next.loggedIn) {
+        _loadedWhileAuthenticated = false;
+        state = const AsyncValue.data(<HomeSection>[]);
+      }
+    });
     refresh(force: true);
   }
 
   Future<void> refresh({bool force = true}) async {
     if (!force && _loadedWhileAuthenticated && state is AsyncData) return;
 
-    state = const AsyncValue.loading();
+    // Keep existing data visible during refresh to avoid skeleton flash.
+    final hadData = state is AsyncData;
+    if (!hadData) state = const AsyncValue.loading();
+
     final authed = await ApiService.instance.isAuthenticated();
     if (!authed) {
       _loadedWhileAuthenticated = false;
@@ -72,12 +87,12 @@ class GroupsNotifier extends StateNotifier<AsyncValue<List<HomeSection>>> {
       state = AsyncValue.data(list);
     } catch (e, st) {
       _loadedWhileAuthenticated = false;
-      state = AsyncValue.error(e, st);
+      if (!hadData) state = AsyncValue.error(e, st);
     }
   }
 }
 
 final groupsProvider =
     StateNotifierProvider<GroupsNotifier, AsyncValue<List<HomeSection>>>(
-  (ref) => GroupsNotifier(),
+  (ref) => GroupsNotifier(ref),
 );

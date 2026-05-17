@@ -17,7 +17,7 @@ bool _isMobilePlatform() {
 }
 
 ThemeData buildV2LightTheme() {
-  const bg = Color(0xFFF5F6F8);
+  const bg = Colors.white;
   const surface = Colors.white;
 
   final isMobile = _isMobilePlatform();
@@ -30,7 +30,7 @@ ThemeData buildV2LightTheme() {
     secondary: Color(0xFF43A047),
     onSecondary: Colors.white,
     surface: surface,
-    onSurface: Color(0xFF1A1C1E),
+    onSurface: Color(0xFF3C3E40),
     error: Colors.red,
     onError: Colors.white,
   );
@@ -45,13 +45,17 @@ ThemeData buildV2LightTheme() {
       titleTextStyle: TextStyle(
         fontSize: 18,
         fontWeight: FontWeight.w600,
-        color: Colors.black,
+        color: Color(0xFF333333),
       ),
     ),
     cardTheme: CardThemeData(
       color: surface.withValues(alpha: 0.9),
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    ),
+    dividerTheme: const DividerThemeData(
+      color: Color(0xFFE4E6E8),
+      thickness: 1,
     ),
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(
       elevation: 12,

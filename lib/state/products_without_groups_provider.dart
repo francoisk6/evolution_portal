@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/api_service.dart';
+import 'session_provider.dart';
 
 class ProductWithoutGroup {
   /// Backend returns an arbitrary string identifier (often lowercased).
@@ -32,17 +33,28 @@ class ProductWithoutGroup {
 
 class ProductsWithoutGroupsNotifier
     extends StateNotifier<AsyncValue<List<ProductWithoutGroup>>> {
+  final Ref _ref;
   bool _loadedWhileAuthenticated = false;
 
-  ProductsWithoutGroupsNotifier() : super(const AsyncValue.loading()) {
-    // Auto-load as soon as the provider is first read.
+  ProductsWithoutGroupsNotifier(this._ref) : super(const AsyncValue.loading()) {
+    var prevLoggedIn = _ref.read(sessionProvider).loggedIn;
+    _ref.listen<SessionState>(sessionProvider, (_, next) {
+      final wasLoggedIn = prevLoggedIn;
+      prevLoggedIn = next.loggedIn;
+      if (wasLoggedIn && !next.loggedIn) {
+        _loadedWhileAuthenticated = false;
+        state = const AsyncValue.data(<ProductWithoutGroup>[]);
+      }
+    });
     refresh(force: true);
   }
 
   Future<void> refresh({bool force = true}) async {
     if (!force && _loadedWhileAuthenticated && state is AsyncData) return;
 
-    state = const AsyncValue.loading();
+    // Keep existing data visible during refresh to avoid skeleton flash.
+    final hadData = state is AsyncData;
+    if (!hadData) state = const AsyncValue.loading();
 
     final authed = await ApiService.instance.isAuthenticated();
     if (!authed) {
@@ -61,12 +73,12 @@ class ProductsWithoutGroupsNotifier
       state = AsyncValue.data(list);
     } catch (e, st) {
       _loadedWhileAuthenticated = false;
-      state = AsyncValue.error(e, st);
+      if (!hadData) state = AsyncValue.error(e, st);
     }
   }
 }
 
 final productsWithoutGroupsProvider = StateNotifierProvider<
     ProductsWithoutGroupsNotifier, AsyncValue<List<ProductWithoutGroup>>>(
-  (ref) => ProductsWithoutGroupsNotifier(),
+  (ref) => ProductsWithoutGroupsNotifier(ref),
 );

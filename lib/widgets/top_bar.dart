@@ -10,7 +10,6 @@ import '../app/app_env.dart';
 import '../routing/route_names.dart';
 import '../state/session_provider.dart';
 import '../services/auth_service.dart';
-import '../app/app_state_scope.dart';
 import '../app/app_cache_manager.dart';
 import 'notification_bell.dart';
 
@@ -119,7 +118,6 @@ class TopBar extends ConsumerWidget {
             onPressed: () async {
               await AuthService.instance.logout();
               await ref.read(sessionProvider).logout();
-              AppStateScope.reset();
             },
             icon: const Icon(Icons.logout, size: 18),
             label: const Text('Logout'),
@@ -131,7 +129,6 @@ class TopBar extends ConsumerWidget {
             onPressed: () async {
               await AuthService.instance.logout();
               await ref.read(sessionProvider).logout();
-              AppStateScope.reset();
             },
           ),
         const SizedBox(width: 8),
