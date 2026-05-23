@@ -28,7 +28,7 @@ class BalanceService {
     bool? status,
     int? currencyId,
     bool? distinctUsers,
-    int? userId,
+    List<int>? userIds,
     bool? includeFilters,
   }) =>
       ApiService.instance.getBalanceHistory(
@@ -38,7 +38,7 @@ class BalanceService {
         status: status,
         currencyId: currencyId,
         distinctUsers: distinctUsers,
-        userId: userId,
+        userIds: userIds,
         includeFilters: includeFilters,
       );
 }

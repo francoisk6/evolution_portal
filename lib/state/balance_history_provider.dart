@@ -39,6 +39,37 @@ bool? _asBoolOrNull(dynamic v) {
   return null;
 }
 
+double? _parseNullableDouble(dynamic v) {
+  if (v == null) return null;
+  if (v is num) return v.toDouble();
+  final s = v.toString().trim();
+  if (s.isEmpty || s.toLowerCase() == 'null') return null;
+  return double.tryParse(s);
+}
+
+class BalanceTotalsEntry {
+  final String currency;
+  final double? total;
+  final double? paid;
+  final double? balanceDue;
+
+  const BalanceTotalsEntry({
+    required this.currency,
+    this.total,
+    this.paid,
+    this.balanceDue,
+  });
+
+  factory BalanceTotalsEntry.fromJson(Map<String, dynamic> m) {
+    return BalanceTotalsEntry(
+      currency: (_asCleanString(m['currency']) ?? '').toUpperCase(),
+      total: _parseNullableDouble(m['total']),
+      paid: _parseNullableDouble(m['paid']),
+      balanceDue: _parseNullableDouble(m['balance_due']),
+    );
+  }
+}
+
 class BalanceEntry {
   final int id;
   final DateTime date;
@@ -192,14 +223,14 @@ class BalanceFilterCurrencyOption {
 }
 
 class BalanceFilterSelected {
-  final int? userId;
+  final List<int>? userIds;
   final int? currencyId;
   final String? currencyCode;
   final bool? status;
   final bool? distinctUsers;
 
   const BalanceFilterSelected({
-    this.userId,
+    this.userIds,
     this.currencyId,
     this.currencyCode,
     this.status,
@@ -207,8 +238,18 @@ class BalanceFilterSelected {
   });
 
   factory BalanceFilterSelected.fromJson(Map<String, dynamic> m) {
+    List<int>? parseUserIds(dynamic v) {
+      if (v == null) return null;
+      if (v is List) {
+        final ids = v.map(_asIntOrNull).whereType<int>().toList();
+        return ids.isEmpty ? null : ids;
+      }
+      final single = _asIntOrNull(v);
+      return single != null ? [single] : null;
+    }
+
     return BalanceFilterSelected(
-      userId: _asIntOrNull(m['user_id'] ?? m['user']),
+      userIds: parseUserIds(m['user_ids'] ?? m['user_id'] ?? m['user']),
       currencyId: _asIntOrNull(m['currency_id']),
       currencyCode: _asCleanString(m['currency'])?.toUpperCase(),
       status: _asBoolOrNull(m['status']),
@@ -275,7 +316,7 @@ class BalanceFilters {
   final DateTime? to;
   final bool? status; // null=All
   final int? currencyId;
-  final int? userId;
+  final List<int>? userIds;
   final bool distinctUsers;
 
   const BalanceFilters({
@@ -283,7 +324,7 @@ class BalanceFilters {
     this.to,
     this.status,
     this.currencyId,
-    this.userId,
+    this.userIds,
     this.distinctUsers = false,
   });
 
@@ -292,7 +333,7 @@ class BalanceFilters {
     Object? to = _balanceUnset,
     Object? status = _balanceUnset,
     Object? currencyId = _balanceUnset,
-    Object? userId = _balanceUnset,
+    Object? userIds = _balanceUnset,
     Object? distinctUsers = _balanceUnset,
   }) {
     return BalanceFilters(
@@ -300,7 +341,7 @@ class BalanceFilters {
       to: to is _Unset ? this.to : to as DateTime?,
       status: status is _Unset ? this.status : status as bool?,
       currencyId: currencyId is _Unset ? this.currencyId : currencyId as int?,
-      userId: userId is _Unset ? this.userId : userId as int?,
+      userIds: userIds is _Unset ? this.userIds : userIds as List<int>?,
       distinctUsers: distinctUsers is _Unset
           ? this.distinctUsers
           : distinctUsers as bool,
@@ -313,7 +354,7 @@ class BalanceFilters {
       to: to,
       status: status,
       currencyId: selected.currencyId ?? currencyId,
-      userId: selected.userId ?? userId,
+      userIds: (selected.userIds?.isNotEmpty == true) ? selected.userIds : userIds,
       distinctUsers: selected.distinctUsers ?? distinctUsers,
     );
   }
@@ -326,6 +367,7 @@ class BalanceHistoryState {
   final bool hasMore;
   final BalanceFilters filters;
   final BalanceFilterData? filterData;
+  final List<BalanceTotalsEntry> totals;
 
   const BalanceHistoryState({
     this.items = const [],
@@ -334,6 +376,7 @@ class BalanceHistoryState {
     this.hasMore = true,
     this.filters = const BalanceFilters(),
     this.filterData,
+    this.totals = const [],
   });
 
   BalanceHistoryState copyWith({
@@ -343,6 +386,7 @@ class BalanceHistoryState {
     bool? hasMore,
     BalanceFilters? filters,
     Object? filterData = _balanceUnset,
+    List<BalanceTotalsEntry>? totals,
   }) {
     return BalanceHistoryState(
       items: items ?? this.items,
@@ -353,6 +397,7 @@ class BalanceHistoryState {
       filterData: filterData is _Unset
           ? this.filterData
           : filterData as BalanceFilterData?,
+      totals: totals ?? this.totals,
     );
   }
 }
@@ -380,7 +425,7 @@ class BalanceHistoryNotifier extends StateNotifier<BalanceHistoryState> {
         status: state.filters.status,
         currencyId: state.filters.currencyId,
         distinctUsers: state.filters.distinctUsers,
-        userId: state.filters.userId,
+        userIds: state.filters.userIds,
         includeFilters: reset,
       );
 
@@ -420,6 +465,23 @@ class BalanceHistoryNotifier extends StateNotifier<BalanceHistoryState> {
         nextFilters = nextFilters.applyBackendSelected(selected);
       }
 
+      List<BalanceTotalsEntry>? parsedTotals;
+      if (reset) {
+        final rawTotals = (data['totals'] as List?) ?? const <dynamic>[];
+        parsedTotals = rawTotals
+            .whereType<Map>()
+            .map((e) => BalanceTotalsEntry.fromJson(e.cast<String, dynamic>()))
+            .where((e) => e.currency.isNotEmpty)
+            .toList();
+        parsedTotals.sort((a, b) {
+          const preferred = {'LBP': 0, 'USD': 1};
+          final pa = preferred[a.currency] ?? 99;
+          final pb = preferred[b.currency] ?? 99;
+          if (pa != pb) return pa.compareTo(pb);
+          return a.currency.compareTo(b.currency);
+        });
+      }
+
       state = state.copyWith(
         items: newList,
         page: nextPage + 1,
@@ -427,6 +489,7 @@ class BalanceHistoryNotifier extends StateNotifier<BalanceHistoryState> {
         loading: false,
         filterData: nextFilterData,
         filters: nextFilters,
+        totals: parsedTotals,
       );
     } catch (_) {
       state = state.copyWith(loading: false);

@@ -313,6 +313,427 @@ class _SearchableDropdownField<T> extends StatelessWidget {
   }
 }
 
+class _MultiSelectDropdownField<T> extends StatelessWidget {
+  final String label;
+  final String? hintText;
+  final List<T> values;
+  final List<_ComboBoxOption<T>> options;
+  final ValueChanged<List<T>> onChanged;
+  final String allLabel;
+
+  const _MultiSelectDropdownField({
+    required this.label,
+    required this.values,
+    required this.options,
+    required this.onChanged,
+    this.hintText,
+    this.allLabel = 'All',
+  });
+
+  String _displayLabel() {
+    if (values.isEmpty) return hintText ?? allLabel;
+    if (values.length == 1) {
+      for (final opt in options) {
+        if (opt.value == values.first) return opt.label;
+      }
+    }
+    return '${values.length} selected';
+  }
+
+  Future<void> _openPicker(BuildContext context) async {
+    final selected = Set<T>.from(values);
+
+    final result = await showModalBottomSheet<List<T>?>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        final searchCtl = TextEditingController();
+
+        return EvolutionPopupScrollScope(
+          child: FractionallySizedBox(
+            heightFactor: 0.72,
+            child: StatefulBuilder(
+              builder: (context, setState) {
+                final query = searchCtl.text.trim().toLowerCase();
+                final filtered = query.isEmpty
+                    ? options
+                    : options
+                        .where((o) => o.label.toLowerCase().contains(query))
+                        .toList();
+
+                return SafeArea(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      12,
+                      6,
+                      12,
+                      MediaQuery.of(context).viewInsets.bottom + 12,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                label,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                              ),
+                            ),
+                            if (selected.isNotEmpty)
+                              TextButton(
+                                onPressed: () =>
+                                    setState(() => selected.clear()),
+                                child: const Text('Clear all'),
+                              ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(
+                                context,
+                                selected.toList(),
+                              ),
+                              child: const Text('Done'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: searchCtl,
+                          autofocus: true,
+                          style: const TextStyle(fontSize: 12),
+                          decoration: InputDecoration(
+                            hintText: 'Type to search',
+                            isDense: true,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            prefixIcon: const Icon(Icons.search, size: 18),
+                            suffixIcon: searchCtl.text.isEmpty
+                                ? null
+                                : IconButton(
+                                    tooltip: 'Clear search',
+                                    icon: const Icon(Icons.clear, size: 18),
+                                    onPressed: () {
+                                      searchCtl.clear();
+                                      setState(() {});
+                                    },
+                                  ),
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: filtered.isEmpty
+                                ? const Center(
+                                    child: Text(
+                                      'No matching items',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    itemCount: filtered.length,
+                                    separatorBuilder: (_, __) => Divider(
+                                      height: 1,
+                                      color: Colors.grey.shade200,
+                                    ),
+                                    itemBuilder: (context, index) {
+                                      final option = filtered[index];
+                                      final isSelected =
+                                          selected.contains(option.value);
+                                      return CheckboxListTile(
+                                        dense: true,
+                                        controlAffinity:
+                                            ListTileControlAffinity.leading,
+                                        value: isSelected,
+                                        onChanged: (v) {
+                                          setState(() {
+                                            if (v == true) {
+                                              selected.add(option.value);
+                                            } else {
+                                              selected.remove(option.value);
+                                            }
+                                          });
+                                        },
+                                        title: Text(
+                                          option.label,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: isSelected
+                                                ? FontWeight.w700
+                                                : FontWeight.w500,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+
+    if (result == null) return;
+    onChanged(result);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasValues = values.isNotEmpty;
+    final theme = Theme.of(context);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => _openPicker(context),
+        child: InputDecorator(
+          decoration: InputDecoration(
+            isDense: true,
+            labelText: label,
+            labelStyle: const TextStyle(fontSize: 11.5),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 9,
+            ),
+            suffixIconConstraints: const BoxConstraints(
+              minWidth: 54,
+              minHeight: 32,
+            ),
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (hasValues)
+                  IconButton(
+                    tooltip: 'Clear',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.clear, size: 18),
+                    onPressed: () => onChanged(const []),
+                  ),
+                const Icon(Icons.arrow_drop_down, size: 20),
+                const SizedBox(width: 4),
+              ],
+            ),
+          ),
+          child: Text(
+            _displayLabel(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              color:
+                  hasValues ? theme.colorScheme.onSurface : theme.hintColor,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BalanceTotalMetric {
+  final String label;
+  final Color? color;
+  final String Function(BalanceTotalsEntry) value;
+
+  const _BalanceTotalMetric({
+    required this.label,
+    required this.value,
+    this.color,
+  });
+}
+
+class _BalanceTotalsHeader extends StatelessWidget {
+  final List<BalanceTotalsEntry> totals;
+  final Color fg;
+  final Color fgSoft;
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  const _BalanceTotalsHeader({
+    required this.totals,
+    required this.fg,
+    required this.fgSoft,
+    required this.expanded,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const green = Color(0xFF28A745);
+    const darkGreen = Color(0xFF1E7E34);
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: green.withValues(alpha: .10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: green.withValues(alpha: .35)),
+      ),
+      child: Column(
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onToggle,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: expanded
+                    ? const EdgeInsets.fromLTRB(8, 10, 8, 6)
+                    : const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                child: Center(
+                  child: Container(
+                    width: 46,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: green.withValues(alpha: .35),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 180),
+            crossFadeState:
+                expanded ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+            firstChild: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
+              child: _buildTable(darkGreen),
+            ),
+            secondChild: const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTable(Color headerColor) {
+    bool nonZero(double? v) => v != null && v.abs() > 0.00001;
+
+    final hasTotal = totals.any((e) => nonZero(e.total));
+    final hasPaid = totals.any((e) => nonZero(e.paid));
+
+    final metrics = <_BalanceTotalMetric>[
+      if (hasTotal)
+        _BalanceTotalMetric(
+          label: 'Total',
+          value: (e) => e.total != null
+              ? MoneyFormat.format(e.total!, currencyCode: e.currency)
+              : '—',
+        ),
+      if (hasPaid)
+        _BalanceTotalMetric(
+          label: 'Paid',
+          color: const Color(0xFF1E7E34),
+          value: (e) => e.paid != null
+              ? MoneyFormat.format(e.paid!, currencyCode: e.currency)
+              : '—',
+        ),
+      _BalanceTotalMetric(
+        label: 'Balance Due',
+        color: const Color(0xFFE67E22),
+        value: (e) => e.balanceDue != null
+            ? MoneyFormat.format(e.balanceDue!, currencyCode: e.currency)
+            : '—',
+      ),
+    ];
+
+    const curW = 56.0;
+    const cellW = 140.0;
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: SizedBox(
+        width: curW + metrics.length * cellW,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const SizedBox(width: curW),
+                ...metrics.map(
+                  (m) => SizedBox(
+                    width: cellW,
+                    child: Text(
+                      m.label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: m.color ?? headerColor,
+                      ),
+                      textAlign: TextAlign.end,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ...totals.map(
+              (e) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: curW,
+                      child: Text(
+                        e.currency,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: headerColor,
+                        ),
+                      ),
+                    ),
+                    ...metrics.map(
+                      (m) => SizedBox(
+                        width: cellW,
+                        child: Text(
+                          m.value(e),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                            color: m.color ?? fgSoft,
+                          ),
+                          textAlign: TextAlign.end,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class BalanceHistoryPage extends ConsumerStatefulWidget {
   const BalanceHistoryPage({super.key});
 
@@ -331,6 +752,7 @@ class _BalanceHistoryPageState extends ConsumerState<BalanceHistoryPage> {
 
   double? _maxDueBalanceLbp;
   double? _maxDueBalanceUsd;
+  bool _totalsExpanded = true;
 
   @override
   void initState() {
@@ -415,7 +837,7 @@ class _BalanceHistoryPageState extends ConsumerState<BalanceHistoryPage> {
       text: current.to == null ? '' : _df.format(current.to!),
     );
     int? selectedCurrencyId = current.currencyId;
-    int? selectedUserId = current.userId;
+    Set<int> selectedUserIds = Set<int>.from(current.userIds ?? const []);
     bool distinctUsers = current.distinctUsers;
     int statusIdx = current.status == null ? 0 : (current.status! ? 1 : 2);
 
@@ -472,7 +894,7 @@ class _BalanceHistoryPageState extends ConsumerState<BalanceHistoryPage> {
                   fromCtl.clear();
                   toCtl.clear();
                   selectedCurrencyId = null;
-                  selectedUserId = null;
+                  selectedUserIds = {};
                   distinctUsers = false;
                   statusIdx = 0;
                 });
@@ -486,7 +908,9 @@ class _BalanceHistoryPageState extends ConsumerState<BalanceHistoryPage> {
                   to: parse(toCtl.text),
                   status: statusIdx == 0 ? null : (statusIdx == 1),
                   currencyId: selectedCurrencyId,
-                  userId: selectedUserId,
+                  userIds: selectedUserIds.isEmpty
+                      ? null
+                      : selectedUserIds.toList(),
                   distinctUsers: distinctUsers,
                 );
                 ref.read(balanceHistoryProvider.notifier).setFilters(f);
@@ -653,17 +1077,18 @@ class _BalanceHistoryPageState extends ConsumerState<BalanceHistoryPage> {
                                         ],
                                       ),
                                       if (userOptions.isNotEmpty ||
-                                          selectedUserId != null) ...[
+                                          selectedUserIds.isNotEmpty) ...[
                                         const SizedBox(height: 12),
-                                        _SearchableDropdownField<int>(
-                                          label: 'User',
+                                        _MultiSelectDropdownField<int>(
+                                          label: 'Users',
                                           hintText: 'All users',
                                           allLabel: 'All users',
-                                          value: selectedUserId,
+                                          values: selectedUserIds.toList(),
                                           options: userOptions,
                                           onChanged: (v) {
                                             setModalState(
-                                              () => selectedUserId = v,
+                                              () => selectedUserIds =
+                                                  Set<int>.from(v),
                                             );
                                           },
                                         ),
@@ -1081,6 +1506,16 @@ class _BalanceHistoryPageState extends ConsumerState<BalanceHistoryPage> {
               ),
               const SizedBox(height: 12),
             ],
+            if (state.totals.isNotEmpty) ...[
+              _BalanceTotalsHeader(
+                totals: state.totals,
+                fg: _fg,
+                fgSoft: _fgSoft,
+                expanded: _totalsExpanded,
+                onToggle: () => setState(() => _totalsExpanded = !_totalsExpanded),
+              ),
+              const SizedBox(height: 12),
+            ],
             if (state.loading && state.items.isNotEmpty) ...[
               const LinearProgressIndicator(minHeight: 2),
               const SizedBox(height: 12),
@@ -1179,19 +1614,20 @@ class _BalanceFiltersSummary extends StatelessWidget {
       }
       chips.add('Currency: ${label ?? filters.currencyId}');
     }
-    if (filters.userId != null) {
-      String? userLabel;
+    if (filters.userIds != null && filters.userIds!.isNotEmpty) {
       final users =
           filterData?.available?.users ?? const <BalanceFilterUserOption>[];
-      for (final entry in users) {
-        if (entry.id == filters.userId) {
-          userLabel = entry.label.trim().isNotEmpty
-              ? entry.label.trim()
-              : entry.username;
-          break;
+      final labels = filters.userIds!.map((id) {
+        for (final entry in users) {
+          if (entry.id == id) {
+            final l = entry.label.trim();
+            return l.isNotEmpty ? l : entry.username;
+          }
         }
-      }
-      chips.add('User: ${userLabel ?? filters.userId}');
+        return '#$id';
+      }).toList();
+      final prefix = labels.length == 1 ? 'User' : 'Users';
+      chips.add('$prefix: ${labels.join(', ')}');
     }
     if (filters.status != null) {
       chips.add(filters.status == true ? 'Status: PAID' : 'Status: DUE');

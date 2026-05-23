@@ -770,7 +770,7 @@ class ApiService {
     bool? status,
     int? currencyId,
     bool? distinctUsers,
-    int? userId,
+    List<int>? userIds,
     bool? includeFilters,
   }) async {
     await _ensureTokenLoaded();
@@ -789,7 +789,9 @@ class ApiService {
     if (status != null) qp['status'] = status.toString(); // "true"/"false"
     if (currencyId != null) qp['currency'] = currencyId.toString();
     if (distinctUsers != null) qp['distinct_users'] = distinctUsers.toString();
-    if (userId != null) qp['user'] = userId.toString();
+    if (userIds != null && userIds.isNotEmpty) {
+      qp['user_ids'] = userIds.join(',');
+    }
     if (includeFilters != null) {
       qp['include_filters'] = includeFilters ? '1' : '0';
     }
