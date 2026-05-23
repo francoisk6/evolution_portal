@@ -99,7 +99,7 @@ class _MaintenanceOverlayState extends State<_MaintenanceOverlay> {
                   children: [
                     Row(
                       children: [
-                        const _LabelChip(label: 'AQ'),
+                        const _LabelChip(label: 'EV'),
                         const SizedBox(width: 8),
                         const _LabelChip(
                           label: 'Scheduled Maintenance',
