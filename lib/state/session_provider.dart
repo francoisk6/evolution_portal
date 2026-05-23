@@ -51,25 +51,29 @@ class SessionState extends ChangeNotifier {
   }
 
   Future<void> _bootstrap() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
-    _loggedIn = token != null && token.isNotEmpty;
-    _avatarUrl = prefs.getString('user_avatar_url');
-
-    // Best-effort: load persisted user_json and extract profile.use_pin_on_order
     try {
-      final raw = prefs.getString('user_json');
-      if (raw != null && raw.trim().isNotEmpty) {
-        final decoded = jsonDecode(raw);
-        final data = _extractData(decoded);
-        _applyUserFlags(data);
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+      _loggedIn = token != null && token.isNotEmpty;
+      _avatarUrl = prefs.getString('user_avatar_url');
+
+      // Best-effort: load persisted user_json and extract profile flags.
+      try {
+        final raw = prefs.getString('user_json');
+        if (raw != null && raw.trim().isNotEmpty) {
+          final decoded = jsonDecode(raw);
+          final data = _extractData(decoded);
+          _applyUserFlags(data);
+        }
+      } catch (_) {
+        // ignore
       }
     } catch (_) {
-      // ignore
+      // SharedPreferences unavailable — treat as logged out.
+    } finally {
+      _ready = true;
+      notifyListeners();
     }
-
-    _ready = true;
-    notifyListeners();
   }
 
   bool _asBool(dynamic v) {

@@ -36,6 +36,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final loggingIn = path == R.login || path == R.register;
       if (!session.loggedIn && !loggingIn) return R.login;
       if (session.loggedIn && loggingIn) return R.home;
+      // Root path has no route — redirect to the correct destination.
+      if (path == '/' || path.isEmpty) return session.loggedIn ? R.home : R.login;
       return null;
     },
     refreshListenable:

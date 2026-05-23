@@ -69,8 +69,10 @@
       } finally {
         localStorage.setItem(KEY, CLEANUP_VERSION);
 
+        // Reload without adding a query param — a param-modified URL persists
+        // in the browser address bar and GoRouter treats it as an unmatched route.
         const url = new URL(window.location.href);
-        url.searchParams.set('cache_cleanup', CLEANUP_VERSION);
+        url.search = '';
         window.location.replace(url.toString());
       }
     }
