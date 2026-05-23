@@ -60,9 +60,16 @@ class DownloadCancelToken {
   }
 }
 
+class MaintenanceModeException implements Exception {
+  const MaintenanceModeException();
+  @override
+  String toString() => 'Service temporarily unavailable for maintenance.';
+}
+
 class ApiService {
   ApiService._();
   static final ApiService instance = ApiService._();
+  static final ValueNotifier<bool> maintenanceMode = ValueNotifier<bool>(false);
 
   String get _base => AppEnv.base;
   String get _authBase => AppEnv.authBase;
@@ -205,8 +212,20 @@ class ApiService {
     return env;
   }
 
-  Never _fail(ApiEnvelope env, String fallback) =>
-      throw Exception(env.humanError ?? fallback);
+  Never _fail(ApiEnvelope env, String fallback) {
+    if (env.status == 503) {
+      maintenanceMode.value = true;
+      throw const MaintenanceModeException();
+    }
+    throw Exception(env.humanError ?? fallback);
+  }
+
+  void _throwIfMaintenance(int status) {
+    if (status == 503) {
+      maintenanceMode.value = true;
+      throw const MaintenanceModeException();
+    }
+  }
 
   Future<void> _persistUserJsonFrom(Map<String, dynamic> payload) async {
     final prefs = await SharedPreferences.getInstance();
@@ -830,6 +849,7 @@ class ApiService {
       throw Exception('Session expired. Please login again.');
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
+      _throwIfMaintenance(res.statusCode);
       throw Exception('Failed to load groups (HTTP ${res.statusCode}).');
     }
 
@@ -872,6 +892,7 @@ class ApiService {
       throw Exception('Session expired. Please login again.');
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
+      _throwIfMaintenance(res.statusCode);
       throw Exception(
           'Failed to load products without groups (HTTP ${res.statusCode}).');
     }
@@ -944,6 +965,7 @@ class ApiService {
       throw Exception('Session expired. Please login again.');
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
+      _throwIfMaintenance(res.statusCode);
       throw Exception('Failed to load brands (HTTP ${res.statusCode}).');
     }
 
@@ -1009,6 +1031,7 @@ class ApiService {
       throw Exception('Session expired. Please login again.');
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
+      _throwIfMaintenance(res.statusCode);
       // Backend typically returns {"detail": "..."} for no match; keep it readable.
       Map<String, dynamic>? decoded;
       try {
@@ -1085,6 +1108,7 @@ class ApiService {
     }
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
+      _throwIfMaintenance(res.statusCode);
       Map<String, dynamic>? decoded;
       try {
         final text = _bodyText(res);
@@ -1165,6 +1189,7 @@ class ApiService {
     }
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
+      _throwIfMaintenance(res.statusCode);
       Map<String, dynamic>? decoded;
       try {
         final t = _bodyText(res);
@@ -1257,6 +1282,7 @@ class ApiService {
     );
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
+      _throwIfMaintenance(res.statusCode);
       String? _firstNonEmpty(Map<String, dynamic>? m) {
         if (m == null) return null;
         for (final k in const ['message', 'error', 'detail']) {
@@ -1353,6 +1379,7 @@ class ApiService {
     );
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
+      _throwIfMaintenance(res.statusCode);
       String? _firstNonEmpty(Map<String, dynamic>? m) {
         if (m == null) return null;
         for (final k in const ['message', 'error', 'detail']) {

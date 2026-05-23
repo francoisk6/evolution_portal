@@ -7,6 +7,7 @@ import 'app/app_scroll_behavior.dart';
 import 'app/app_theme.dart';
 import 'app/app_state_scope.dart';
 import 'features/update/force_update_gate.dart';
+import 'features/update/maintenance_gate.dart';
 import 'state/session_provider.dart';
 
 Future<void> main() async {
@@ -65,6 +66,7 @@ class EvolutionApp extends ConsumerWidget {
                     ),
                   ),
                 const ForceUpdateGate(),
+                const MaintenanceGate(),
               ],
             );
           },
