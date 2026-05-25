@@ -42,6 +42,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     },
     refreshListenable:
         session, // ✅ reacts to auth changes without recreating router
+    // Any unmatched route (e.g. stale Android intent, deep link from an older
+    // app version) silently routes to home/login instead of rendering blank.
+    errorBuilder: (context, state) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final target = session.loggedIn ? R.home : R.login;
+        context.go(target);
+      });
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    },
     routes: [
       GoRoute(
         path: R.login,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app/app_env.dart';
 import 'app/app_router.dart';
@@ -23,12 +24,62 @@ Future<void> main() async {
     return true;
   }());
 
+  // Replace the release-mode default ErrorWidget (an invisible Container) so
+  // build-time failures show a visible message + recovery action instead of
+  // a blank/grey body that also appears unresponsive to navigation.
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return _BuildFailureFallback(details: details);
+  };
+
   runApp(
     AppStateScope(
       key: appStateScopeKey,
       child: const EvolutionApp(),
     ),
   );
+}
+
+class _BuildFailureFallback extends StatelessWidget {
+  final FlutterErrorDetails details;
+  const _BuildFailureFallback({required this.details});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFFFFF8F8),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.warning_amber_rounded,
+                  color: Colors.redAccent, size: 36),
+              const SizedBox(height: 8),
+              const Text(
+                'Something went wrong loading this page.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: () {
+                  final ctx = context;
+                  try {
+                    GoRouter.of(ctx).go('/home');
+                  } catch (_) {
+                    AppStateScope.reset();
+                  }
+                },
+                icon: const Icon(Icons.home),
+                label: const Text('Go Home'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class EvolutionApp extends ConsumerWidget {
