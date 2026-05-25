@@ -12,6 +12,7 @@ class SessionState extends ChangeNotifier {
   bool _hideDealerPrice = false;
   bool _isStaff = false;
   bool _isSuperuser = false;
+  String _username = '';
 
   bool get ready => _ready;
   bool get loggedIn => _loggedIn;
@@ -22,6 +23,7 @@ class SessionState extends ChangeNotifier {
   bool get isStaff => _isStaff;
   bool get isSuperuser => _isSuperuser;
   bool get isAdmin => _isStaff || _isSuperuser;
+  String get username => _username;
 
   SessionState() {
     _bootstrap();
@@ -48,6 +50,8 @@ class SessionState extends ChangeNotifier {
     _hideDealerPrice = _asBool(profileMap['hide_dealer_price'] ?? data['hide_dealer_price']);
     _isStaff = _asBool(data['is_staff'] ?? profileMap['is_staff']);
     _isSuperuser = _asBool(data['is_superuser'] ?? profileMap['is_superuser']);
+    final u = (data['username'] ?? profileMap['username'] ?? '').toString().trim();
+    if (u.isNotEmpty) _username = u;
   }
 
   Future<void> _bootstrap() async {

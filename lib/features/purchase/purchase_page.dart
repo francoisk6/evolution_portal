@@ -56,6 +56,7 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
   OnlinePurchaseOrderData? _order;
   bool _loading = false;
   bool _posting = false;
+  bool _lookupBusy = false;
   String? _error;
   bool _showPriceDetails = true;
 
@@ -1624,6 +1625,166 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
         '${hex(bytes[10], 2)}${hex(bytes[11], 2)}${hex(bytes[12], 2)}${hex(bytes[13], 2)}${hex(bytes[14], 2)}${hex(bytes[15], 2)}';
   }
 
+  // ───────────────────── dictionary lookup ─────────────────────
+
+  static String _pickClientName(Map<String, dynamic> row) {
+    for (final entry in row.entries) {
+      if (entry.key.toLowerCase() == 'clientname') {
+        return (entry.value ?? '').toString().trim();
+      }
+    }
+    return '';
+  }
+
+  Future<void> _showLookupDialog({
+    required OnlinePurchaseOrderData data,
+    required String dataKey,
+    TextEditingController? targetCtrl,
+  }) async {
+    if (_lookupBusy) return;
+    setState(() => _lookupBusy = true);
+
+    List<Map<String, dynamic>>? results;
+    String? fetchError;
+
+    try {
+      final username = ref.read(sessionProvider).username;
+      results = await ApiService.instance.getProductDictionaryLookup(
+        user: username,
+        product: data.brand.product,
+        dataKey: dataKey,
+      );
+    } catch (e) {
+      fetchError = e.toString().replaceFirst('Exception: ', '');
+    } finally {
+      if (mounted) setState(() => _lookupBusy = false);
+    }
+
+    if (!mounted) return;
+
+    if (fetchError != null) {
+      _snack(fetchError, error: true);
+      return;
+    }
+
+    if (results == null || results.isEmpty) {
+      _snack('No results found.');
+      return;
+    }
+
+    final showValueCol = dataKey != 'clientname' &&
+        results.any((r) => (r[dataKey]?.toString() ?? '').isNotEmpty);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Select client',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+        contentPadding: const EdgeInsets.fromLTRB(0, 12, 0, 0),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (showValueCol)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text('Name',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.grey.shade600)),
+                        ),
+                        Text(_prettyLabel(dataKey),
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.grey.shade600)),
+                      ],
+                    ),
+                  ),
+                const Divider(height: 1),
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: results!.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final row = results![i];
+                    final clientname = _pickClientName(row);
+                    final value = showValueCol
+                        ? (row[dataKey] ?? '').toString()
+                        : '';
+                    return ListTile(
+                      dense: true,
+                      title: Text(clientname,
+                          style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600)),
+                      trailing: (showValueCol && value.isNotEmpty)
+                          ? Text(value,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade700))
+                          : null,
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        if (clientname.isNotEmpty) {
+                          _fullNameCtl.text = clientname;
+                        }
+                        if (value.isNotEmpty && targetCtrl != null) {
+                          targetCtrl.text = value;
+                        }
+                        setState(() {});
+                        _persistPurchaseFlow();
+                      },
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _lookupSuffixBtn({
+    required OnlinePurchaseOrderData data,
+    required String dataKey,
+    TextEditingController? targetCtrl,
+  }) {
+    return IconButton(
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(),
+      tooltip: 'Lookup',
+      icon: _lookupBusy
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 1.5),
+            )
+          : Icon(Icons.search, size: 18, color: Colors.grey.shade600),
+      onPressed: _lookupBusy
+          ? null
+          : () => _showLookupDialog(
+                data: data,
+                dataKey: dataKey,
+                targetCtrl: targetCtrl,
+              ),
+    );
+  }
+
   // ───────────────────── build ─────────────────────
 
   @override
@@ -1738,6 +1899,10 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
     final leftChildren = <Widget>[];
 
     // Full name at the top
+    final lookupDataKey =
+        data.params.isNotEmpty ? data.params.first : 'clientname';
+    final lookupTargetCtrl =
+        data.params.isNotEmpty ? _paramCtrls[data.params.first] : null;
     leftChildren.add(
       _topLabel(
         'Full name',
@@ -1749,6 +1914,11 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
           decoration: _dec(
             hint: 'Customer name',
             hasValue: _fullNameCtl.text.trim().isNotEmpty,
+            suffix: _lookupSuffixBtn(
+              data: data,
+              dataKey: lookupDataKey,
+              targetCtrl: lookupTargetCtrl,
+            ),
           ),
           onChanged: (_) => setState(() {}),
         ),
@@ -1773,6 +1943,11 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                 hint: _prettyLabel(p),
                 hasValue: ctl.text.trim().isNotEmpty,
                 requiredField: true,
+                suffix: _lookupSuffixBtn(
+                  data: data,
+                  dataKey: p,
+                  targetCtrl: ctl,
+                ),
               ),
               onChanged: (_) {
                 if (_isCableVisionSlaveRefillBrand(data) &&

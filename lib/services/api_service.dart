@@ -1146,6 +1146,60 @@ class ApiService {
     throw Exception('Unexpected customer-info response shape.');
   }
 
+  /// GET /api/online/product-dictionary/lookup/
+  ///
+  /// Pass either [product] or [groupTab] (not both).
+  Future<List<Map<String, dynamic>>> getProductDictionaryLookup({
+    required String user,
+    String? product,
+    int? groupTab,
+    required String dataKey,
+  }) async {
+    await _ensureTokenLoaded();
+
+    final qp = <String, String>{
+      'user': user.trim(),
+      'data_key': dataKey.trim(),
+    };
+    if (product != null && product.trim().isNotEmpty) {
+      qp['product'] = product.trim();
+    }
+    if (groupTab != null) {
+      qp['group_tab'] = groupTab.toString();
+    }
+
+    final url = Uri.parse('${AppEnv.onlineBase}product-dictionary/lookup/')
+        .replace(queryParameters: qp);
+
+    http.Response res = await http.get(url, headers: _jsonHeaders(auth: true));
+
+    if (res.statusCode == 401) {
+      for (final ms in const [60, 180]) {
+        await Future.delayed(Duration(milliseconds: ms));
+        await _forceReloadToken();
+        if (_token == null || _token!.isEmpty) continue;
+        res = await http.get(url, headers: _jsonHeaders(auth: true));
+        if (res.statusCode != 401) break;
+      }
+    }
+
+    if (res.statusCode == 401) {
+      if (_token != null && _token!.isNotEmpty) await logout();
+      throw Exception('Session expired. Please login again.');
+    }
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      _throwIfMaintenance(res.statusCode);
+      throw Exception('Lookup failed (HTTP ${res.statusCode}).');
+    }
+
+    final decoded = jsonDecode(_bodyText(res));
+    if (decoded is List) {
+      return decoded.whereType<Map<String, dynamic>>().toList();
+    }
+    return const [];
+  }
+
   /// POST /api/online/cv/receiver-info/
   ///
   /// Body: {"receiver_number": "..."}

@@ -14,6 +14,7 @@ import '../../state/online_brand_selection_provider.dart';
 import '../../state/online_customer_info_provider.dart';
 import '../../state/online_purchase_criteria_provider.dart';
 import '../../state/online_flow_state_provider.dart';
+import '../../state/session_provider.dart';
 import '../../utils/contact_phone_picker.dart';
 import '../../widgets/grid_scroll_container.dart';
 import '../../widgets/error_message.dart';
@@ -66,6 +67,7 @@ class _OnlineBrandSelectionPageState
 
   // Customer-info flow (for tabs with has_info=true)
   bool _infoLoading = false;
+  bool _lookupBusy = false;
   OnlineCustomerInfoResponse? _customerInfo;
   String? _customerInfoError;
 
@@ -249,6 +251,144 @@ class _OnlineBrandSelectionPageState
     _cvSubmitPulse.dispose();
     _cvValidNotifier.dispose();
     super.dispose();
+  }
+
+  static String _pickClientName(Map<String, dynamic> row) {
+    for (final entry in row.entries) {
+      if (entry.key.toLowerCase() == 'clientname') {
+        return (entry.value ?? '').toString().trim();
+      }
+    }
+    return '';
+  }
+
+  static String _pickByKey(Map<String, dynamic> row, String key) {
+    final lower = key.toLowerCase();
+    for (final entry in row.entries) {
+      if (entry.key.toLowerCase() == lower) {
+        return (entry.value ?? '').toString().trim();
+      }
+    }
+    return '';
+  }
+
+  void _snack(String msg, {bool error = false}) {
+    final m = msg.trim();
+    if (m.isEmpty || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: error ? Colors.red.shade700 : Colors.green.shade700,
+      content: Text(m),
+    ));
+  }
+
+  Future<void> _showGroupTabLookupDialog({
+    required int groupSubdetailId,
+    required String dataKey,
+  }) async {
+    if (_lookupBusy) return;
+    setState(() => _lookupBusy = true);
+
+    List<Map<String, dynamic>>? results;
+    String? fetchError;
+
+    try {
+      final username = ref.read(sessionProvider).username;
+      results = await ApiService.instance.getProductDictionaryLookup(
+        user: username,
+        groupTab: groupSubdetailId,
+        dataKey: dataKey,
+      );
+    } catch (e) {
+      fetchError = e.toString().replaceFirst('Exception: ', '');
+    } finally {
+      if (mounted) setState(() => _lookupBusy = false);
+    }
+
+    if (!mounted) return;
+    if (fetchError != null) { _snack(fetchError, error: true); return; }
+    if (results == null || results.isEmpty) { _snack('No results found.'); return; }
+
+    final showValueCol = dataKey.toLowerCase() != 'clientname' &&
+        results.any((r) => _pickByKey(r, dataKey).isNotEmpty);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Select client',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+        contentPadding: const EdgeInsets.fromLTRB(0, 12, 0, 0),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (showValueCol)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text('Name',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.grey.shade600)),
+                        ),
+                        Text(dataKey,
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.grey.shade600)),
+                      ],
+                    ),
+                  ),
+                const Divider(height: 1),
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: results!.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final row = results![i];
+                    final clientname = _pickClientName(row);
+                    final value =
+                        showValueCol ? _pickByKey(row, dataKey) : '';
+                    return ListTile(
+                      dense: true,
+                      title: Text(
+                        clientname.isNotEmpty ? clientname : value,
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      trailing: (showValueCol && value.isNotEmpty)
+                          ? Text(value,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade700))
+                          : null,
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        final fill =
+                            value.isNotEmpty ? value : clientname;
+                        if (fill.isNotEmpty) _accountCtl.text = fill;
+                      },
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
   }
 
   TextInputType _infoKeyboardType(String helperText) {
@@ -673,7 +813,7 @@ class _OnlineBrandSelectionPageState
               ),
               const SizedBox(height: 10),
 
-              // has_info UI (unchanged)
+              // has_info UI
               if (hasInfo)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -698,7 +838,26 @@ class _OnlineBrandSelectionPageState
                             ),
                           ),
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 6),
+                        IconButton(
+                          tooltip: 'Lookup',
+                          icon: _lookupBusy
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 1.5),
+                                )
+                              : Icon(Icons.search,
+                                  color: Colors.grey.shade600),
+                          onPressed: _lookupBusy
+                              ? null
+                              : () => _showGroupTabLookupDialog(
+                                    groupSubdetailId: activeId,
+                                    dataKey: helperText,
+                                  ),
+                        ),
+                        const SizedBox(width: 4),
                         FilledButton(
                           onPressed: _infoLoading
                               ? null

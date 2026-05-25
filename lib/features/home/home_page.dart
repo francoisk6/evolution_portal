@@ -267,6 +267,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                                               final avatar =
                                                   _mediaUrl(d.avatar);
                                               return Padding(
+                                                key: ValueKey(d.id),
                                                 padding:
                                                     const EdgeInsets.symmetric(
                                                   horizontal: 8,
@@ -412,6 +413,7 @@ class _ProductsWithoutGroupsSection extends StatelessWidget {
                   children: display
                       .map(
                         (p) => _AltCard(
+                          key: ValueKey(p.id.isNotEmpty ? p.id : p.alt),
                           alt: p.alt,
                           onTap: () {
                             // Open the same Online Brands page, but using the
@@ -448,6 +450,7 @@ class _AltCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   const _AltCard({
+    super.key,
     required this.alt,
     this.onTap,
   });

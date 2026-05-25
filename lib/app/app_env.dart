@@ -30,7 +30,7 @@ class AppEnv {
   /// Switch to [AppEnvMode.dev] for local development, [AppEnvMode.prod] for release builds.
   /// **************************************************************************************
 
-  static const AppEnvMode envMode = AppEnvMode.prod;
+  static const AppEnvMode envMode = AppEnvMode.dev;
 
   /// **************************************************************************************
   /// **************************************************************************************
