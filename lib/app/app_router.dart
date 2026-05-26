@@ -19,16 +19,19 @@ import '../features/admin/user_brand_profit_page.dart';
 import '../features/admin/workspace_ops_page.dart';
 import '../features/admin/workspace_transaction_cleanup_page.dart';
 
-// Top-level singletons with labels (helps the console point to the right key if duplicated)
-final rootNavKey = GlobalKey<NavigatorState>(debugLabel: 'rootNav');
-final shellNavKey = GlobalKey<NavigatorState>(debugLabel: 'shellNav');
-
 final appRouterProvider = Provider<GoRouter>((ref) {
   // IMPORTANT: don't watch here — keeps a single router instance.
   final session = ref.read(sessionProvider);
 
+  // Keys must live inside the provider so each ProviderScope reset (AppStateScope.reset)
+  // gets fresh instances. Module-level singletons caused Flutter to transplant the old
+  // Navigator element from inactive → new tree, then fail the _elements.contains assertion
+  // when unmounting the old tree.
+  final rootNavKey = GlobalKey<NavigatorState>(debugLabel: 'rootNav');
+  final shellNavKey = GlobalKey<NavigatorState>(debugLabel: 'shellNav');
+
   return GoRouter(
-    navigatorKey: rootNavKey, // ✅ use the labeled key
+    navigatorKey: rootNavKey,
     initialLocation: R.home,
     redirect: (context, state) {
       if (!session.ready) return null;
@@ -63,7 +66,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const AuthScaffold(child: RegisterPage()),
       ),
       ShellRoute(
-        navigatorKey: shellNavKey, // ✅ use the labeled key
+        navigatorKey: shellNavKey,
         builder: (context, state, child) =>
             AppScaffold(body: child, location: state.uri.toString()),
         routes: [

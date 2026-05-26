@@ -353,7 +353,10 @@ class _AccountTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final avatar = account.avatarUrl.trim();
+    final rawAvatar = account.avatarUrl.trim();
+    final avatar = rawAvatar.startsWith('http:')
+        ? rawAvatar.replaceFirst('http:', 'https:')
+        : rawAvatar;
 
     // On smaller screens, trailing actions can consume most of the width and
     // force the title/subtitle into an unusably narrow column. For compact

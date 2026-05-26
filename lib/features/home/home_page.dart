@@ -61,6 +61,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             cacheManager: AppCacheManager.images,
           ),
           context,
+          onError: (e, s) {},
         );
       }
     }
