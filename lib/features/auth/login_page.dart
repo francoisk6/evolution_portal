@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app/app_env.dart';
+import '../../app/app_state_scope.dart';
 import '../../routing/route_names.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
@@ -100,8 +101,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('user_json', jsonEncode(me));
 
-      // Update session state (router will redirect automatically).
-      await ref.read(sessionProvider).afterLogin(me);
+      // Reset all providers so home page builds with clean state (no stale
+      // provider data from the previous session causing a null crash).
+      await ref.read(sessionProvider).persistLoginDataForReset(me);
+      AppStateScope.reset();
 
       // Refresh the cached account card.
       final updated = _accountFromMe(me, fallbackUsername: acc.username);
@@ -170,8 +173,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       // This will also persist SharedPreferences('auth_token') via ApiService.
       final me = await AuthService.instance.login(u, p, pin);
 
-      // Update session state (router redirect will follow).
-      await ref.read(sessionProvider).afterLogin(me);
+      // Reset all providers so home page builds with clean state (no stale
+      // provider data from the previous session causing a null crash).
+      await ref.read(sessionProvider).persistLoginDataForReset(me);
+      AppStateScope.reset();
 
       // Save for quick account switching (token + profile). Token comes from the login response.
       // Token may be returned either inside {data.token} or at envelope level.

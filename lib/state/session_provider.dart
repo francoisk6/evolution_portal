@@ -125,6 +125,27 @@ class SessionState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Save avatar URL from a login response to SharedPreferences WITHOUT
+  /// notifying listeners. Called before AppStateScope.reset() so the new
+  /// ProviderScope's _bootstrap() picks up the avatar from prefs directly.
+  Future<void> persistLoginDataForReset(Map<String, dynamic> me) async {
+    final data = _extractData(me);
+    final profile = data['profile'];
+    final profileMap = profile is Map<String, dynamic>
+        ? profile
+        : (profile is Map ? profile.cast<String, dynamic>() : const <String, dynamic>{});
+    final avatar = profileMap['avatar']?.toString();
+    final prefs = await SharedPreferences.getInstance();
+    if (avatar == null || avatar.isEmpty) {
+      await prefs.remove('user_avatar_url');
+    } else {
+      final url = avatar.startsWith('http:')
+          ? avatar.replaceFirst('http:', 'https:')
+          : avatar;
+      await prefs.setString('user_avatar_url', url);
+    }
+  }
+
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
