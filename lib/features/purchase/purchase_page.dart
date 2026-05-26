@@ -1928,7 +1928,11 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
     // Params (account number / phone number, etc.)
     if (data.params.isNotEmpty) {
       for (final p in data.params) {
-        final ctl = _paramCtrls[p]!;
+        final ctl = _paramCtrls.putIfAbsent(p, () {
+          final c = TextEditingController();
+          c.addListener(_persistPurchaseFlow);
+          return c;
+        });
         leftChildren.add(const SizedBox(height: 10));
         leftChildren.add(
           _topLabel(

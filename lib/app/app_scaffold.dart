@@ -633,8 +633,11 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
       });
     });
 
-    // Always start with no page actions to avoid ghost buttons.
+    // Always start with no stale global state from a previous AppScaffold.
     pageActions.value = const <PageAction>[];
+    pageNav.value = null;
+    EvolutionScrollRegistry.activeScrollable.value = null;
+    EvolutionScrollRegistry.activePopupContext.value = null;
     // Initial page load → refresh balances (force)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -668,6 +671,10 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
       _boundScrollPosition?.removeListener(_handleBoundScrollPositionChanged);
     } catch (_) {}
     HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
+    // Clear global ValueNotifiers so stale state from this session never
+    // leaks into the next AppScaffold instance (e.g. after re-login).
+    pageNav.value = null;
+    EvolutionScrollRegistry.activeScrollable.value = null;
     super.dispose();
   }
 
@@ -689,8 +696,13 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
       valueListenable: router.routeInformationProvider,
       builder: (context, info, _) {
         final loc = _routeInfoToLocation(info, fallback: widget.location);
-        final path = Uri.tryParse(loc)?.path ?? loc;
-        final isHome = path == R.home;
+        // widget.location comes from ShellRoute state — always reflects the
+        // current logical route, even during the first build after a redirect.
+        // routeInformationProvider.value.uri is stale on that first build
+        // (still holds the pre-redirect path, e.g. /auth/login), so we must
+        // NOT derive isHome from it.
+        final isHome =
+            (Uri.tryParse(widget.location)?.path ?? widget.location) == R.home;
 
         Widget buildNavStrip() {
           return ValueListenableBuilder<PageNavConfig?>(

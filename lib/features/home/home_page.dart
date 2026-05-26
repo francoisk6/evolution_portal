@@ -42,7 +42,9 @@ class _HomePageState extends ConsumerState<HomePage> {
   String _mediaUrl(String avatar) {
     // API returns "/media/..." → make absolute using base (…/api/ → /)
     final root = AppEnv.base.replaceFirst(RegExp(r'/api/?$'), '/');
-    if (avatar.startsWith('http')) return avatar;
+    if (avatar.startsWith('http')) {
+      return avatar.startsWith('https') ? avatar : avatar.replaceFirst('http:', 'https:');
+    }
     return '$root${avatar.replaceFirst(RegExp(r'^/'), '')}';
   }
 

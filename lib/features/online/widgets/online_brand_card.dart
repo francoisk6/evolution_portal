@@ -32,7 +32,9 @@ class OnlineBrandCard extends StatelessWidget {
     // API returns "/media/..." → make absolute using base (…/api/ → /)
     final root = AppEnv.base.replaceFirst(RegExp(r'/api/?$'), '/');
     if (avatar.isEmpty) return '';
-    if (avatar.startsWith('http')) return avatar;
+    if (avatar.startsWith('http')) {
+      return avatar.startsWith('https') ? avatar : avatar.replaceFirst('http:', 'https:');
+    }
     return '$root${avatar.replaceFirst(RegExp(r'^/'), '')}';
   }
 

@@ -16,7 +16,13 @@ class SessionState extends ChangeNotifier {
 
   bool get ready => _ready;
   bool get loggedIn => _loggedIn;
-  String? get avatarUrl => _avatarUrl;
+  // Upgrade http:// → https:// so mixed-content errors don't crash
+  // CachedNetworkImage on HTTPS deployments.
+  String? get avatarUrl {
+    final u = _avatarUrl;
+    if (u == null || u.isEmpty) return u;
+    return u.startsWith('http:') ? u.replaceFirst('http:', 'https:') : u;
+  }
   bool get usePinOnOrder => _usePinOnOrder ?? true;
   bool get hideDealerPrice => _hideDealerPrice;
   bool get showDealerPrice => !_hideDealerPrice;
