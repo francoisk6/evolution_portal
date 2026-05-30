@@ -1,7 +1,7 @@
 name: evolution_portal
 publish_to: 'none'
 description: Evolution Portal
-version: 1.2.15+33
+version: 1.2.16+34
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -26,6 +26,7 @@ dependencies:
   printing: ^5.13.0
   pdf: ^3.11.0
   flutter_native_contact_picker: ^0.0.12
+  flutter_inappwebview: ^6.0.0
   
 dev_dependencies:
   flutter_test:

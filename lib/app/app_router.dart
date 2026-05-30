@@ -18,6 +18,7 @@ import '../features/about/about_page.dart';
 import '../features/admin/user_brand_profit_page.dart';
 import '../features/admin/workspace_ops_page.dart';
 import '../features/admin/workspace_transaction_cleanup_page.dart';
+import '../features/admin/admin_webview_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   // IMPORTANT: don't watch here — keeps a single router instance.
@@ -111,6 +112,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               path: R.adminWorkspaceTransactionCleanup,
               builder: (c, s) => const WorkspaceTransactionCleanupPage()),
         ],
+      ),
+      // Admin WebView — outside ShellRoute so it gets its own AppBar with no BottomNav
+      GoRoute(
+        path: R.adminPanel,
+        builder: (c, s) => const AdminWebViewScreen(),
       ),
     ],
   );

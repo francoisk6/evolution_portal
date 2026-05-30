@@ -21,4 +21,5 @@ class R {
   static const String adminWorkspaceOps = '/admin/workspace-ops';
   static const String adminWorkspaceTransactionCleanup =
       '/admin/workspace-transaction-cleanup';
+  static const String adminPanel = '/admin-panel';
 }

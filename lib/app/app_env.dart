@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum AppEnvMode { dev, prod }
@@ -45,22 +46,30 @@ class AppEnv {
   /// - API host aliases below are also accepted for safety.
   static const String webRootHost = 'evolution-portal.com';
 
-  static const List<WorkspaceConfig> workspaces = <WorkspaceConfig>[
-    WorkspaceConfig(
-      slug: 'main',
-      displayName: 'Main',
-      apiBaseUrl: envMode == AppEnvMode.prod
-          ? 'https://api.evolution-portal.com'
-          : 'http://localhost:8010',
-    ),
-    WorkspaceConfig(
-      slug: 'horizon',
-      displayName: 'Horizon',
-      apiBaseUrl: envMode == AppEnvMode.prod
-          ? 'https://horizonapi.evolution-portal.com'
-          : 'http://localhost:8810',
-    ),
-  ];
+  // Android emulator can't reach the host via 'localhost' — use 10.0.2.2.
+  // Physical Android device: change this to your machine's LAN IP instead.
+  static String get _devHost {
+    if (kIsWeb) return 'localhost';
+    if (defaultTargetPlatform == TargetPlatform.android) return '10.0.2.2';
+    return 'localhost';
+  }
+
+  static List<WorkspaceConfig> get workspaces => <WorkspaceConfig>[
+        WorkspaceConfig(
+          slug: 'main',
+          displayName: 'Main',
+          apiBaseUrl: envMode == AppEnvMode.prod
+              ? 'https://api.evolution-portal.com'
+              : 'http://$_devHost:8010',
+        ),
+        WorkspaceConfig(
+          slug: 'horizon',
+          displayName: 'Horizon',
+          apiBaseUrl: envMode == AppEnvMode.prod
+              ? 'https://horizonapi.evolution-portal.com'
+              : 'http://$_devHost:8810',
+        ),
+      ];
 
   static WorkspaceConfig get defaultWorkspace => workspaces.first;
 
@@ -76,6 +85,10 @@ class AppEnv {
   static String get balanceBase => '${base}balance/';
   static String get homeBase => '${base}home/';
   static String get onlineBase => '${base}online/';
+
+  static String get adminBase => '${_selectedWorkspace.apiRoot}/admin/';
+  static String get adminAutologinUrl =>
+      '${_selectedWorkspace.apiRoot}/admin-autologin/';
 
   static Future<void> initWorkspace() async {
     final hostWorkspace = _workspaceFromCurrentWebHost();
