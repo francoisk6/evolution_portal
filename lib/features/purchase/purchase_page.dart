@@ -108,6 +108,7 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
             pageScrollOffset: _pageScrollController.hasClients
                 ? _pageScrollController.offset
                 : (_pendingPageScrollOffset ?? 0),
+            orderUuid: _orderUuid,
           ),
         );
   }
@@ -126,6 +127,8 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
     _showPriceDetails = saved.showPriceDetails;
     _pendingParamValues = Map<String, String>.from(saved.params);
     _pendingPageScrollOffset = saved.pageScrollOffset;
+    // Restore the idempotency key so a page refresh reuses the same UUID.
+    if (saved.orderUuid.isNotEmpty) _orderUuid = saved.orderUuid;
     if (saved.criteriaInfo != null && saved.criteriaInfo!.isNotEmpty) {
       final restoredCriteria = Map<String, dynamic>.from(saved.criteriaInfo!);
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1190,7 +1193,6 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
         ..addAll(sanitized);
     }
 
-    _orderUuid = _uuidV4();
     setState(() => _posting = true);
 
     try {

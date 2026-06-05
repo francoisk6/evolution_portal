@@ -142,6 +142,9 @@ class OnlinePurchaseFlowState {
   final Map<String, String> params;
   final Map<String, dynamic>? criteriaInfo;
   final double pageScrollOffset;
+  // Idempotency key: generated once per purchase flow, survives page refreshes.
+  // Cleared when the flow resets after a successful purchase.
+  final String orderUuid;
 
   const OnlinePurchaseFlowState({
     required this.selectionKey,
@@ -152,6 +155,7 @@ class OnlinePurchaseFlowState {
     required this.params,
     required this.criteriaInfo,
     required this.pageScrollOffset,
+    required this.orderUuid,
   });
 }
 
