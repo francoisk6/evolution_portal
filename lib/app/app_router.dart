@@ -19,6 +19,8 @@ import '../features/admin/user_brand_profit_page.dart';
 import '../features/admin/workspace_ops_page.dart';
 import '../features/admin/workspace_transaction_cleanup_page.dart';
 import '../features/admin/admin_webview_screen.dart';
+import '../features/admin/batch_refill/batch_sheet_selector_page.dart';
+import '../features/admin/batch_refill/batch_grid_page.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   // IMPORTANT: don't watch here — keeps a single router instance.
@@ -111,6 +113,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
               path: R.adminWorkspaceTransactionCleanup,
               builder: (c, s) => const WorkspaceTransactionCleanupPage()),
+          GoRoute(
+              path: R.adminBatchRefill,
+              builder: (c, s) => const BatchSheetSelectorPage()),
+          GoRoute(
+            path: R.adminBatchRefillGrid,
+            builder: (c, s) {
+              final id = int.tryParse(
+                      s.pathParameters['sheetId'] ?? '') ??
+                  0;
+              final name = Uri.decodeComponent(
+                  s.uri.queryParameters['name'] ?? '');
+              return BatchGridPage(sheetId: id, sheetName: name);
+            },
+          ),
         ],
       ),
       // Admin WebView — outside ShellRoute so it gets its own AppBar with no BottomNav

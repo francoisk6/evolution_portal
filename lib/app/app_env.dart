@@ -86,6 +86,8 @@ class AppEnv {
   static String get homeBase => '${base}home/';
   static String get onlineBase => '${base}online/';
 
+  static String get batchBase => '${base}batch/';
+
   static String get adminBase => '${_selectedWorkspace.apiRoot}/admin/';
   static String get adminAutologinUrl =>
       '${_selectedWorkspace.apiRoot}/admin-autologin/';

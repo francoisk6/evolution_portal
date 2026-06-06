@@ -22,4 +22,6 @@ class R {
   static const String adminWorkspaceTransactionCleanup =
       '/admin/workspace-transaction-cleanup';
   static const String adminPanel = '/admin-panel';
+  static const String adminBatchRefill = '/admin/batch-refill';
+  static const String adminBatchRefillGrid = '/admin/batch-refill/:sheetId';
 }

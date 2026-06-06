@@ -80,6 +80,15 @@ class LeftMenuDrawer extends ConsumerWidget {
                           Navigator.pop(context);
                         },
                       ),
+                      ListTile(
+                        leading: const Icon(Icons.batch_prediction_outlined),
+                        title: const Text('Batch Refill'),
+                        selected: isRoute(R.adminBatchRefill),
+                        onTap: () {
+                          context.go(R.adminBatchRefill);
+                          Navigator.pop(context);
+                        },
+                      ),
                     ],
                   ),
                   const Divider(),
