@@ -129,7 +129,12 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
     _pendingPageScrollOffset = saved.pageScrollOffset;
     // Restore the idempotency key so a page refresh reuses the same UUID.
     if (saved.orderUuid.isNotEmpty) _orderUuid = saved.orderUuid;
-    if (saved.criteriaInfo != null && saved.criteriaInfo!.isNotEmpty) {
+    // Only restore saved criteria if the brand page hasn't already set fresh criteria.
+    // If the provider is non-null, the brand page just set updated options before navigating
+    // here, and restoring the old saved criteria would cause stale prices.
+    if (saved.criteriaInfo != null &&
+        saved.criteriaInfo!.isNotEmpty &&
+        ref.read(onlinePurchaseCriteriaProvider) == null) {
       final restoredCriteria = Map<String, dynamic>.from(saved.criteriaInfo!);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
