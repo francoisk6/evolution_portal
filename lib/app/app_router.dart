@@ -16,6 +16,7 @@ import '../features/purchase/purchase_page.dart';
 import '../features/online/online_brand_selection_page.dart';
 import '../features/about/about_page.dart';
 import '../features/admin/user_brand_profit_page.dart';
+import '../features/admin/prepaid_stock_page.dart';
 import '../features/admin/workspace_ops_page.dart';
 import '../features/admin/workspace_transaction_cleanup_page.dart';
 import '../features/admin/admin_webview_screen.dart';
@@ -107,6 +108,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
               path: R.adminUserBrandProfit,
               builder: (c, s) => const UserBrandProfitPage()),
+          GoRoute(
+              path: R.adminPrepaidStock,
+              builder: (c, s) => const PrepaidStockPage()),
           GoRoute(
               path: R.adminWorkspaceOps,
               builder: (c, s) => const WorkspaceOpsPage()),

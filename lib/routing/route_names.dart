@@ -18,6 +18,7 @@ class R {
   static const String accountProfile = '/account/profile';
 
   static const String adminUserBrandProfit = '/admin/user-brand-profit';
+  static const String adminPrepaidStock = '/admin/prepaid-stock';
   static const String adminWorkspaceOps = '/admin/workspace-ops';
   static const String adminWorkspaceTransactionCleanup =
       '/admin/workspace-transaction-cleanup';

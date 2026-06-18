@@ -1282,6 +1282,51 @@ class ApiService {
     throw Exception('Unexpected receiver-info response shape.');
   }
 
+  /// GET /api/online/prepaid/stock-by-brand/
+  ///
+  /// Prepaid card stock grouped by brand, with cascading filters.
+  /// `*_ids` are sent as comma lists (?brand_ids=1,2). Single + list are merged
+  /// server-side. Returns the raw envelope:
+  /// { success, message, applied, brand_count, total_quantity, results: [...] }
+  Future<Map<String, dynamic>> getPrepaidStockByBrand({
+    List<int>? sectorIds,
+    List<int>? categoryIds,
+    List<int>? productIds,
+    List<int>? brandIds,
+    String? search,
+    String? consumed,
+    String? order,
+  }) async {
+    await _ensureTokenLoaded();
+    if (_token == null || _token!.isEmpty) {
+      await _forceReloadToken();
+    }
+
+    final base = AppEnv.onlineBase;
+
+    final qp = <String, String>{};
+    void addIds(String key, List<int>? ids) {
+      if (ids != null && ids.isNotEmpty) qp[key] = ids.join(',');
+    }
+
+    addIds('sector_ids', sectorIds);
+    addIds('category_ids', categoryIds);
+    addIds('product_ids', productIds);
+    addIds('brand_ids', brandIds);
+
+    final q = (search ?? '').trim();
+    if (q.isNotEmpty) qp['search'] = q;
+    final c = (consumed ?? '').trim();
+    if (c.isNotEmpty) qp['consumed'] = c;
+    final o = (order ?? '').trim();
+    if (o.isNotEmpty) qp['order'] = o;
+
+    final url = Uri.parse('${base}prepaid/stock-by-brand/')
+        .replace(queryParameters: qp.isEmpty ? null : qp);
+
+    return _getJsonMap(url, auth: true);
+  }
+
   // ───────────────── ACCOUNT / ORDER ─────────────────
 
   /// GET /api/account/online-purchase/
