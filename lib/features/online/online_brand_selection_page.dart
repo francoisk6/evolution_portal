@@ -142,9 +142,9 @@ class _OnlineBrandSelectionPageState
       _queuedCvPricingState = null;
 
       ref.read(onlineFlowProvider.notifier).updateBrandCvPricing(
-        routeKey: _flowRouteKey,
-        value: queued,
-      );
+            routeKey: _flowRouteKey,
+            value: queued,
+          );
     });
   }
 
@@ -173,7 +173,8 @@ class _OnlineBrandSelectionPageState
     if (_customerInfo?.success == true && _accountCtl.text.trim().isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        ref.read(onlineCustomerInfoProvider.notifier).state = OnlineCustomerInfoState(
+        ref.read(onlineCustomerInfoProvider.notifier).state =
+            OnlineCustomerInfoState(
           accountNumber: _accountCtl.text.trim(),
           groupSubdetailId: _gsd ?? _defaultGsd,
           response: _customerInfo!,
@@ -306,8 +307,14 @@ class _OnlineBrandSelectionPageState
     }
 
     if (!mounted) return;
-    if (fetchError != null) { _snack(fetchError, error: true); return; }
-    if (results == null || results.isEmpty) { _snack('No results found.'); return; }
+    if (fetchError != null) {
+      _snack(fetchError, error: true);
+      return;
+    }
+    if (results == null || results.isEmpty) {
+      _snack('No results found.');
+      return;
+    }
 
     final showValueCol = dataKey.toLowerCase() != 'clientname' &&
         results.any((r) => _pickByKey(r, dataKey).isNotEmpty);
@@ -353,8 +360,7 @@ class _OnlineBrandSelectionPageState
                   itemBuilder: (_, i) {
                     final row = results![i];
                     final clientname = _pickClientName(row);
-                    final value =
-                        showValueCol ? _pickByKey(row, dataKey) : '';
+                    final value = showValueCol ? _pickByKey(row, dataKey) : '';
                     return ListTile(
                       dense: true,
                       title: Text(
@@ -365,13 +371,11 @@ class _OnlineBrandSelectionPageState
                       trailing: (showValueCol && value.isNotEmpty)
                           ? Text(value,
                               style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade700))
+                                  fontSize: 12, color: Colors.grey.shade700))
                           : null,
                       onTap: () {
                         Navigator.of(ctx).pop();
-                        final fill =
-                            value.isNotEmpty ? value : clientname;
+                        final fill = value.isNotEmpty ? value : clientname;
                         if (fill.isNotEmpty) _accountCtl.text = fill;
                       },
                     );
@@ -437,6 +441,8 @@ class _OnlineBrandSelectionPageState
     final method =
         p.isNotEmpty ? (p[0] ?? '').toString().toLowerCase().trim() : '';
     if (method == 'power_ogero') return 'Enter Ogero account number';
+    if (method == 'alfa_bill') return 'Enter Alfa account number';
+    if (method == 'touch_bill') return 'Enter Touch account number';
     if (method == 'moonet') return 'Enter account number';
     return 'Enter account number';
   }
@@ -582,607 +588,651 @@ class _OnlineBrandSelectionPageState
                 : null,
           ),
           child: GridScrollContainer(
-        controller: _pageScrollController,
-        child: LayoutBuilder(
-        builder: (context, c) {
-          final isMobile = c.maxWidth < 720;
+            controller: _pageScrollController,
+            child: LayoutBuilder(
+              builder: (context, c) {
+                final isMobile = c.maxWidth < 720;
 
-          final body = async.when(
-            loading: () => const Center(
-              child: Padding(
-                padding: EdgeInsets.only(top: 60),
-                child: CircularProgressIndicator(),
-              ),
-            ),
-            error: (e, _) => Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ErrorMessage(
-                    message: e.toString().replaceFirst('Exception: ', ''),
+                final body = async.when(
+                  loading: () => const Center(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 60),
+                      child: CircularProgressIndicator(),
+                    ),
                   ),
-                  const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    onPressed: () => _refresh(query),
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Retry'),
-                  ),
-                ],
-              ),
-            ),
-            data: (payload) {
-          final tabs = payload.tabs;
-          final activeId = (payload.activeSubdetailId != 0)
-              ? payload.activeSubdetailId
-              : (_gsd ?? _defaultGsd);
-
-          OnlineSubdetailTab? activeTab;
-          if (tabs.isNotEmpty) {
-            activeTab = tabs.firstWhere(
-              (t) => t.id == activeId,
-              orElse: () => tabs.first,
-            );
-          }
-
-          final title = (activeTab == null)
-              ? payload.groupDetail.name
-              : '${payload.groupDetail.name} - ${activeTab.name}';
-
-          final hasInfo = activeTab?.hasInfo == true;
-          final helperText = _helperTextFromParams(activeTab);
-
-          // If the user already attempted a customer lookup, and they change currency while staying
-          // on a has-info tab, refresh the customer-info using the new currency.
-          if (hasInfo &&
-              _didFetchCustomerInfo &&
-              !_infoLoading &&
-              (_accountCtl.text.trim().isNotEmpty) &&
-              (_customerInfoCurrency ?? '') != currency) {
-            // Prevent repeated scheduling within the same rebuild.
-            _customerInfoCurrency = currency;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!mounted) return;
-              if (activeTab?.hasInfo != true) return;
-              if (_accountCtl.text.trim().isEmpty) return;
-              if (_infoLoading) return;
-              _fetchCustomerInfo(groupSubdetailId: activeId);
-            });
-          }
-
-          final rawQ = _q.trim().toLowerCase();
-
-          // UX: hide the search filter when the list is small (no need to search < 4 cards).
-          int searchPoolCount = 0;
-          bool canSearch = false;
-
-          List<OnlineBrand> brands;
-
-          if (hasInfo) {
-            // Do not show brands until the user performs the customer lookup.
-            if (_customerInfo?.success == true) {
-              final allowed = _customerInfo!.availableBrands;
-              List<OnlineBrand> base;
-
-              if (allowed == null) {
-                base = payload.active.brands;
-              } else {
-                final allowSet = allowed.toSet();
-                base = payload.active.brands
-                    .where((b) => allowSet.contains(b.id))
-                    .toList(growable: false);
-              }
-
-              searchPoolCount = base.length;
-              canSearch = searchPoolCount >= 4;
-
-              // Only apply search when we show the search UI.
-              final q = canSearch ? rawQ : '';
-              if (q.isNotEmpty) {
-                base = base.where((b) {
-                  final hay = [
-                    b.displayName,
-                    b.name,
-                    b.alt,
-                    b.productName,
-                    b.unit,
-                  ].join(' ').toLowerCase();
-                  return hay.contains(q);
-                }).toList(growable: false);
-              }
-
-              brands = base;
-            } else {
-              brands = const <OnlineBrand>[];
-            }
-          } else {
-            final base = payload.active.brands;
-            searchPoolCount = base.length;
-            canSearch = searchPoolCount >= 4;
-
-            final q = canSearch ? rawQ : '';
-            brands = base.where((b) {
-              if (q.isEmpty) return true;
-              final hay = [
-                b.displayName,
-                b.name,
-                b.alt,
-                b.productName,
-                b.unit,
-              ].join(' ').toLowerCase();
-              return hay.contains(q);
-            }).toList(growable: false);
-          }
-
-          // SPECIAL CASE: if API returns CV pricing, we show the CV form card UI
-          // and we do NOT show the normal "Search brands…" filter.
-          final hasCvPricing = payload.active.cvPricing.isNotEmpty;
-          if (hasCvPricing) {
-            canSearch = false;
-          }
-
-          // If search is disabled (small list OR CV pricing), ensure any previous query is cleared.
-          if (!canSearch && _searchCtl.text.isNotEmpty) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!mounted) return;
-              if (_searchCtl.text.isNotEmpty) _searchCtl.clear();
-            });
-          }
-
-          // Show the CV card when cvPricing exists and there is at least one brand in active.brands.
-          // If the tab is has_info, we wait until customer-info succeeds (because brands list is gated).
-          final showCvPricingCard = hasCvPricing &&
-              brands.isNotEmpty &&
-              (!hasInfo || (_customerInfo?.success == true));
-
-          // UX: if there is only ONE available brand in the active tab (and this is not the CV flow),
-          // auto-select it so the page-level Next behaves as if the user tapped the brand.
-          // NOTE: We base this on the *full* available pool (before any search filtering).
-          final shouldAutoSelectSingleBrand =
-              !hasCvPricing && searchPoolCount == 1 && brands.length == 1;
-          if (shouldAutoSelectSingleBrand) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!mounted) return;
-
-              final b = brands.first;
-
-              // Keep criteria_info clean for non-CV flows when Next is used without tapping.
-              if (!hasInfo) {
-                ref.read(onlinePurchaseCriteriaProvider.notifier).state = null;
-              } else {
-                // For has_info tabs, persist the fetched customer-info as criteria_info
-                // (same shape as the brand-card onTap), so Purchase page/back-end receives it.
-                final infoState = ref.read(onlineCustomerInfoProvider);
-                final merged = <String, dynamic>{'has_info': true};
-                final d = infoState?.response.data;
-                if (d != null && d.isNotEmpty) {
-                  merged.addAll(d);
-                }
-                if (infoState != null &&
-                    !merged.containsKey('account_number') &&
-                    infoState.accountNumber.trim().isNotEmpty) {
-                  merged['account_number'] = infoState.accountNumber.trim();
-                }
-                ref.read(onlinePurchaseCriteriaProvider.notifier).state = merged;
-              }
-
-              final sel = ref.read(onlineBrandSelectionProvider);
-              if (sel != null &&
-                  sel.subdetailId == payload.active.subdetailId &&
-                  sel.brandId == b.id) {
-                return;
-              }
-
-              ref.read(onlineBrandSelectionProvider.notifier).state =
-                  OnlineBrandSelection(
-                brandId: b.id,
-                subdetailId: payload.active.subdetailId,
-              );
-            });
-          }
-
-              _restoreScrollPositions();
-
-              return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _TabsRow(
-                controller: _tabsScrollController,
-                tabs: tabs,
-                activeId: activeId,
-                onTap: (id) {
-                  if (id == _gsd) return;
-                  setState(() {
-                    _gsd = id;
-                    _searchCtl.clear();
-                    _q = '';
-                    _accountCtl.clear();
-                    _resetCustomerInfo();
-                    FocusScope.of(context).unfocus();
-                  });
-                  _cvValidNotifier.value = false;
-                  _persistBrandFlow();
-                },
-              ),
-              const SizedBox(height: 14),
-              Text(
-                title.toUpperCase(),
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 10),
-
-              // has_info UI
-              if (hasInfo)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
+                  error: (e, _) => Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Expanded(
-                          child: HistoryTextField(
-                            historyKey: 'online.account_lookup',
-                            controller: _accountCtl,
-                            keyboardType: _infoKeyboardType(helperText),
-                            textInputAction: TextInputAction.done,
-                            autocorrect: false,
-                            enableSuggestions: false,
-                            style: const TextStyle(fontSize: 13),
-                            decoration: InputDecoration(
-                              hintText: helperText,
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 10),
-                              prefixIcon: const Icon(Icons.person),
-                            ),
-                          ),
+                        ErrorMessage(
+                          message: e.toString().replaceFirst('Exception: ', ''),
                         ),
-                        const SizedBox(width: 6),
-                        IconButton(
-                          tooltip: 'Lookup',
-                          icon: _lookupBusy
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 1.5),
-                                )
-                              : Icon(Icons.search,
-                                  color: Colors.grey.shade600),
-                          onPressed: _lookupBusy
-                              ? null
-                              : () => _showGroupTabLookupDialog(
-                                    groupSubdetailId: activeId,
-                                    dataKey: helperText,
-                                  ),
-                        ),
-                        const SizedBox(width: 4),
-                        FilledButton(
-                          onPressed: _infoLoading
-                              ? null
-                              : () => _fetchCustomerInfo(
-                                    groupSubdetailId:
-                                        payload.active.subdetailId,
-                                  ),
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
-                            textStyle: const TextStyle(fontSize: 13),
-                          ),
-                          child: _infoLoading
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Text('Info'),
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: () => _refresh(query),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry'),
                         ),
                       ],
                     ),
-                    if (_customerInfoError != null &&
-                        _customerInfoError!.trim().isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: ErrorMessage(message: _customerInfoError!),
-                      ),
-                    if (_customerInfo == null && !_infoLoading)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 12),
-                        child: Text(
-                          'Enter the account number and press Info to load the available brands.',
-                        ),
-                      ),
-                    if (_customerInfo?.success == true)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: _CustomerInfoCard(info: _customerInfo!.data),
-                      ),
+                  ),
+                  data: (payload) {
+                    final tabs = payload.tabs;
+                    final activeId = (payload.activeSubdetailId != 0)
+                        ? payload.activeSubdetailId
+                        : (_gsd ?? _defaultGsd);
 
-                    // Only show search UI when:
-                    // - customer info succeeded
-                    // - and there is no CV pricing
-                    // - and list is large enough
-                    if (_customerInfo?.success == true && canSearch) ...[
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: HistoryTextField(
-                              historyKey: 'online.brand_search',
-                              controller: _searchCtl,
-                              style: const TextStyle(fontSize: 13),
-                              decoration: const InputDecoration(
-                                hintText: 'Search brands…',
-                                isDense: true,
-                                contentPadding: EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 10),
-                                prefixIcon: Icon(Icons.search),
+                    OnlineSubdetailTab? activeTab;
+                    if (tabs.isNotEmpty) {
+                      activeTab = tabs.firstWhere(
+                        (t) => t.id == activeId,
+                        orElse: () => tabs.first,
+                      );
+                    }
+
+                    final title = (activeTab == null)
+                        ? payload.groupDetail.name
+                        : '${payload.groupDetail.name} - ${activeTab.displayName}';
+
+                    final hasInfo = activeTab?.hasInfo == true;
+                    final helperText = _helperTextFromParams(activeTab);
+
+                    // If the user already attempted a customer lookup, and they change currency while staying
+                    // on a has-info tab, refresh the customer-info using the new currency.
+                    if (hasInfo &&
+                        _didFetchCustomerInfo &&
+                        !_infoLoading &&
+                        (_accountCtl.text.trim().isNotEmpty) &&
+                        (_customerInfoCurrency ?? '') != currency) {
+                      // Prevent repeated scheduling within the same rebuild.
+                      _customerInfoCurrency = currency;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        if (activeTab?.hasInfo != true) return;
+                        if (_accountCtl.text.trim().isEmpty) return;
+                        if (_infoLoading) return;
+                        _fetchCustomerInfo(groupSubdetailId: activeId);
+                      });
+                    }
+
+                    final rawQ = _q.trim().toLowerCase();
+
+                    // UX: hide the search filter when the list is small (no need to search < 4 cards).
+                    int searchPoolCount = 0;
+                    bool canSearch = false;
+
+                    List<OnlineBrand> brands;
+
+                    if (hasInfo) {
+                      // Do not show brands until the user performs the customer lookup.
+                      if (_customerInfo?.success == true) {
+                        final allowed = _customerInfo!.availableBrands;
+                        List<OnlineBrand> base;
+
+                        if (allowed == null) {
+                          base = payload.active.brands;
+                        } else {
+                          final allowSet = allowed.toSet();
+                          base = payload.active.brands
+                              .where((b) => allowSet.contains(b.id))
+                              .toList(growable: false);
+                        }
+
+                        searchPoolCount = base.length;
+                        canSearch = searchPoolCount >= 4;
+
+                        // Only apply search when we show the search UI.
+                        final q = canSearch ? rawQ : '';
+                        if (q.isNotEmpty) {
+                          base = base.where((b) {
+                            final hay = [
+                              b.displayName,
+                              b.name,
+                              b.alt,
+                              b.productName,
+                              b.unit,
+                            ].join(' ').toLowerCase();
+                            return hay.contains(q);
+                          }).toList(growable: false);
+                        }
+
+                        brands = base;
+                      } else {
+                        brands = const <OnlineBrand>[];
+                      }
+                    } else {
+                      final base = payload.active.brands;
+                      searchPoolCount = base.length;
+                      canSearch = searchPoolCount >= 4;
+
+                      final q = canSearch ? rawQ : '';
+                      brands = base.where((b) {
+                        if (q.isEmpty) return true;
+                        final hay = [
+                          b.displayName,
+                          b.name,
+                          b.alt,
+                          b.productName,
+                          b.unit,
+                        ].join(' ').toLowerCase();
+                        return hay.contains(q);
+                      }).toList(growable: false);
+                    }
+
+                    // SPECIAL CASE: if API returns CV pricing, we show the CV form card UI
+                    // and we do NOT show the normal "Search brands…" filter.
+                    final hasCvPricing = payload.active.cvPricing.isNotEmpty;
+                    if (hasCvPricing) {
+                      canSearch = false;
+                    }
+
+                    // If search is disabled (small list OR CV pricing), ensure any previous query is cleared.
+                    if (!canSearch && _searchCtl.text.isNotEmpty) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        if (_searchCtl.text.isNotEmpty) _searchCtl.clear();
+                      });
+                    }
+
+                    // Show the CV card when cvPricing exists and there is at least one brand in active.brands.
+                    // If the tab is has_info, we wait until customer-info succeeds (because brands list is gated).
+                    final showCvPricingCard = hasCvPricing &&
+                        brands.isNotEmpty &&
+                        (!hasInfo || (_customerInfo?.success == true));
+
+                    // UX: if there is only ONE available brand in the active tab (and this is not the CV flow),
+                    // auto-select it so the page-level Next behaves as if the user tapped the brand.
+                    // NOTE: We base this on the *full* available pool (before any search filtering).
+                    final shouldAutoSelectSingleBrand = !hasCvPricing &&
+                        searchPoolCount == 1 &&
+                        brands.length == 1;
+                    if (shouldAutoSelectSingleBrand) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+
+                        final b = brands.first;
+
+                        // Keep criteria_info clean for non-CV flows when Next is used without tapping.
+                        if (!hasInfo) {
+                          ref
+                              .read(onlinePurchaseCriteriaProvider.notifier)
+                              .state = null;
+                        } else {
+                          // For has_info tabs, persist the fetched customer-info as criteria_info
+                          // (same shape as the brand-card onTap), so Purchase page/back-end receives it.
+                          final infoState =
+                              ref.read(onlineCustomerInfoProvider);
+                          final merged = <String, dynamic>{'has_info': true};
+                          final d = infoState?.response.data;
+                          if (d != null && d.isNotEmpty) {
+                            merged.addAll(d);
+                          }
+                          if (infoState != null &&
+                              !merged.containsKey('account_number') &&
+                              infoState.accountNumber.trim().isNotEmpty) {
+                            merged['account_number'] =
+                                infoState.accountNumber.trim();
+                          }
+                          ref
+                              .read(onlinePurchaseCriteriaProvider.notifier)
+                              .state = merged;
+                        }
+
+                        final sel = ref.read(onlineBrandSelectionProvider);
+                        if (sel != null &&
+                            sel.subdetailId == payload.active.subdetailId &&
+                            sel.brandId == b.id) {
+                          return;
+                        }
+
+                        ref.read(onlineBrandSelectionProvider.notifier).state =
+                            OnlineBrandSelection(
+                          brandId: b.id,
+                          subdetailId: payload.active.subdetailId,
+                        );
+                      });
+                    }
+
+                    _restoreScrollPositions();
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _TabsRow(
+                          controller: _tabsScrollController,
+                          tabs: tabs,
+                          activeId: activeId,
+                          onTap: (id) {
+                            if (id == _gsd) return;
+                            setState(() {
+                              _gsd = id;
+                              _searchCtl.clear();
+                              _q = '';
+                              _accountCtl.clear();
+                              _resetCustomerInfo();
+                              FocusScope.of(context).unfocus();
+                            });
+                            _cvValidNotifier.value = false;
+                            _persistBrandFlow();
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          title.toUpperCase(),
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 10),
+
+                        // has_info UI
+                        if (hasInfo)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: HistoryTextField(
+                                      historyKey: 'online.account_lookup',
+                                      controller: _accountCtl,
+                                      keyboardType:
+                                          _infoKeyboardType(helperText),
+                                      textInputAction: TextInputAction.done,
+                                      autocorrect: false,
+                                      enableSuggestions: false,
+                                      style: const TextStyle(fontSize: 13),
+                                      decoration: InputDecoration(
+                                        hintText: helperText,
+                                        isDense: true,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 12, vertical: 10),
+                                        prefixIcon: const Icon(Icons.person),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  IconButton(
+                                    tooltip: 'Lookup',
+                                    icon: _lookupBusy
+                                        ? const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 1.5),
+                                          )
+                                        : Icon(Icons.search,
+                                            color: Colors.grey.shade600),
+                                    onPressed: _lookupBusy
+                                        ? null
+                                        : () => _showGroupTabLookupDialog(
+                                              groupSubdetailId: activeId,
+                                              dataKey: helperText,
+                                            ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  FilledButton(
+                                    onPressed: _infoLoading
+                                        ? null
+                                        : () => _fetchCustomerInfo(
+                                              groupSubdetailId:
+                                                  payload.active.subdetailId,
+                                            ),
+                                    style: FilledButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 10),
+                                      textStyle: const TextStyle(fontSize: 13),
+                                    ),
+                                    child: _infoLoading
+                                        ? const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2),
+                                          )
+                                        : const Text('Info'),
+                                  ),
+                                ],
                               ),
-                              onChanged: (value) {
-                                if (_q == value) return;
-                                setState(() => _q = value);
+                              if (_customerInfoError != null &&
+                                  _customerInfoError!.trim().isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 10),
+                                  child: ErrorMessage(
+                                      message: _customerInfoError!),
+                                ),
+                              if (_customerInfo == null && !_infoLoading)
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 12),
+                                  child: Text(
+                                    'Enter the account number and press Info to load the available brands.',
+                                  ),
+                                ),
+                              if (_customerInfo?.success == true)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: _CustomerInfoCard(
+                                      info: _customerInfo!.data),
+                                ),
+
+                              // Only show search UI when:
+                              // - customer info succeeded
+                              // - and there is no CV pricing
+                              // - and list is large enough
+                              if (_customerInfo?.success == true &&
+                                  canSearch) ...[
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: HistoryTextField(
+                                        historyKey: 'online.brand_search',
+                                        controller: _searchCtl,
+                                        style: const TextStyle(fontSize: 13),
+                                        decoration: const InputDecoration(
+                                          hintText: 'Search brands…',
+                                          isDense: true,
+                                          contentPadding: EdgeInsets.symmetric(
+                                              horizontal: 12, vertical: 10),
+                                          prefixIcon: Icon(Icons.search),
+                                        ),
+                                        onChanged: (value) {
+                                          if (_q == value) return;
+                                          setState(() => _q = value);
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    FilledButton(
+                                      onPressed: _searchCtl.text.isEmpty
+                                          ? null
+                                          : () {
+                                              _searchCtl.clear();
+                                              FocusScope.of(context).unfocus();
+                                            },
+                                      style: FilledButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 10),
+                                        textStyle:
+                                            const TextStyle(fontSize: 13),
+                                      ),
+                                      child: const Text('Clear'),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          )
+                        else if (canSearch)
+                          Row(
+                            children: [
+                              Expanded(
+                                child: HistoryTextField(
+                                  historyKey: 'online.brand_search',
+                                  controller: _searchCtl,
+                                  style: const TextStyle(fontSize: 13),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Search brands…',
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 10),
+                                    prefixIcon: Icon(Icons.search),
+                                  ),
+                                  onChanged: (value) {
+                                    if (_q == value) return;
+                                    setState(() => _q = value);
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              FilledButton(
+                                onPressed: _searchCtl.text.isEmpty
+                                    ? null
+                                    : () {
+                                        _searchCtl.clear();
+                                        FocusScope.of(context).unfocus();
+                                      },
+                                style: FilledButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 10),
+                                  textStyle: const TextStyle(fontSize: 13),
+                                ),
+                                child: const Text('Clear'),
+                              ),
+                            ],
+                          )
+                        else
+                          const SizedBox.shrink(),
+
+                        const SizedBox(height: 14),
+
+                        // SPECIAL CV CARD (replaces the normal grid when cvPricing exists)
+                        if (showCvPricingCard) ...[
+                          CvPricingBrandCard(
+                            key: ValueKey<String>(
+                                'cv_${payload.active.subdetailId}_$currency'),
+                            subdetailId: payload.active.subdetailId,
+                            initialState: (() {
+                              final flow = ref.read(onlineFlowProvider).brand;
+                              if (flow == null ||
+                                  flow.routeKey != _flowRouteKey) return null;
+                              final cv = flow.cvPricingState;
+                              if (cv == null ||
+                                  cv.subdetailId !=
+                                      payload.active.subdetailId) {
+                                return null;
+                              }
+                              return cv;
+                            })(),
+                            onStateChanged: (value) {
+                              _scheduleCvPricingStatePersist(value);
+                            },
+                            cvPricing: payload.active.cvPricing,
+                            maxSlaves: payload.active.maxSlaves,
+                            slaveCustomerPriceDay:
+                                payload.active.slaveCustomerPriceDay,
+                            activeBrand: payload.active.brands.isNotEmpty
+                                ? payload.active.brands.first
+                                : null,
+                            onHistorySearch: (q) {
+                              // Optional: wire to a backend endpoint if/when available.
+                            },
+                            // Replace the in-card Order button with the page-level Next.
+                            showOrderButton: false,
+                            submitSignal: _cvSubmitPulse,
+                            onValidChanged: (v) {
+                              if (_cvValidNotifier.value == v) return;
+                              _cvValidNotifier.value = v;
+                            },
+                            onOrder: (draft) {
+                              if (!mounted) return;
+
+                              // Store criteria_info for the next step (purchase page).
+                              final ci = draft['criteria_info'];
+                              ref
+                                  .read(onlinePurchaseCriteriaProvider.notifier)
+                                  .state = (ci
+                                      is Map)
+                                  ? ci.cast<String, dynamic>()
+                                  : null;
+
+                              // Select the (single) CV brand in this tab.
+                              if (payload.active.brands.isNotEmpty) {
+                                final b = payload.active.brands.first;
+                                ref
+                                    .read(onlineBrandSelectionProvider.notifier)
+                                    .state = OnlineBrandSelection(
+                                  brandId: b.id,
+                                  subdetailId: payload.active.subdetailId,
+                                );
+                              }
+
+                              // Go to purchase.
+                              context.go(R.purchase);
+                            },
+                          ),
+                        ] else if (!hasInfo) ...[
+                          if (brands.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 30),
+                              child: Center(child: Text('No brands found.')),
+                            )
+                          else
+                            GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: brands.length,
+                              gridDelegate:
+                                  const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 460,
+                                mainAxisExtent: 180,
+                                crossAxisSpacing: 16,
+                                mainAxisSpacing: 16,
+                              ),
+                              itemBuilder: (context, i) {
+                                final b = brands[i];
+                                final isSelected = selection != null &&
+                                    selection.brandId == b.id &&
+                                    selection.subdetailId ==
+                                        payload.active.subdetailId;
+
+                                return OnlineBrandCard(
+                                  brand: b,
+                                  mainLogoUrl: payload.groupDetail.avatar,
+                                  subdetailLabel: activeTab?.displayName ?? '',
+                                  selected: isSelected,
+                                  onTap: () {
+                                    // Clear any previous criteria_info (only CV flow sets it).
+                                    ref
+                                        .read(onlinePurchaseCriteriaProvider
+                                            .notifier)
+                                        .state = null;
+
+                                    ref
+                                        .read(onlineBrandSelectionProvider
+                                            .notifier)
+                                        .state = OnlineBrandSelection(
+                                      brandId: b.id,
+                                      subdetailId: payload.active.subdetailId,
+                                    );
+
+                                    // Non-CV flow: open Purchase immediately.
+                                    context.go(R.purchase);
+                                  },
+                                );
                               },
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          FilledButton(
-                            onPressed: _searchCtl.text.isEmpty
-                                ? null
-                                : () {
-                                    _searchCtl.clear();
-                                    FocusScope.of(context).unfocus();
-                                  },
-                            style: FilledButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 10),
-                              textStyle: const TextStyle(fontSize: 13),
-                            ),
-                            child: const Text('Clear'),
-                          ),
+                        ] else ...[
+                          // hasInfo grid (unchanged)
+                          if (_customerInfo?.success == true) ...[
+                            if (brands.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 30),
+                                child: Center(
+                                  child: Text(
+                                      'No available brands for this account.'),
+                                ),
+                              )
+                            else
+                              GridView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: brands.length,
+                                gridDelegate:
+                                    const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: 460,
+                                  mainAxisExtent: 180,
+                                  crossAxisSpacing: 16,
+                                  mainAxisSpacing: 16,
+                                ),
+                                itemBuilder: (context, i) {
+                                  final b = brands[i];
+                                  final isSelected = selection != null &&
+                                      selection.brandId == b.id &&
+                                      selection.subdetailId ==
+                                          payload.active.subdetailId;
+
+                                  final totalRaw = ((_customerInfo
+                                              ?.data?['total_amount_cur'] ??
+                                          _customerInfo?.data?['total'] ??
+                                          ''))
+                                      .toString()
+                                      .trim();
+
+                                  return OnlineBrandCard(
+                                    brand: b,
+                                    mainLogoUrl: payload.groupDetail.avatar,
+                                    subdetailLabel:
+                                        activeTab?.displayName ?? '',
+                                    overridePriceRaw:
+                                        totalRaw.isNotEmpty ? totalRaw : null,
+                                    overridePriceCurrency: currency,
+                                    selected: isSelected,
+                                    onTap: () {
+                                      // Persist has_info so the purchase flow and backend can treat it
+                                      // similarly to CV (criteria_info present).
+                                      final infoState =
+                                          ref.read(onlineCustomerInfoProvider);
+                                      final merged = <String, dynamic>{
+                                        'has_info': true
+                                      };
+                                      final d = infoState?.response.data;
+                                      if (d != null && d.isNotEmpty) {
+                                        merged.addAll(d);
+                                      }
+                                      if (infoState != null &&
+                                          !merged
+                                              .containsKey('account_number') &&
+                                          infoState.accountNumber
+                                              .trim()
+                                              .isNotEmpty) {
+                                        merged['account_number'] =
+                                            infoState.accountNumber.trim();
+                                      }
+                                      ref
+                                          .read(onlinePurchaseCriteriaProvider
+                                              .notifier)
+                                          .state = merged;
+
+                                      ref
+                                          .read(onlineBrandSelectionProvider
+                                              .notifier)
+                                          .state = OnlineBrandSelection(
+                                        brandId: b.id,
+                                        subdetailId: payload.active.subdetailId,
+                                      );
+
+                                      // has_info flow: open Purchase immediately.
+                                      context.go(R.purchase);
+                                    },
+                                  );
+                                },
+                              ),
+                          ],
                         ],
-                      ),
-                    ],
-                  ],
-                )
-              else if (canSearch)
-                Row(
-                  children: [
-                    Expanded(
-                      child: HistoryTextField(
-                        historyKey: 'online.brand_search',
-                        controller: _searchCtl,
-                        style: const TextStyle(fontSize: 13),
-                        decoration: const InputDecoration(
-                          hintText: 'Search brands…',
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
-                          prefixIcon: Icon(Icons.search),
-                        ),
-                        onChanged: (value) {
-                          if (_q == value) return;
-                          setState(() => _q = value);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    FilledButton(
-                      onPressed: _searchCtl.text.isEmpty
-                          ? null
-                          : () {
-                              _searchCtl.clear();
-                              FocusScope.of(context).unfocus();
-                            },
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                        textStyle: const TextStyle(fontSize: 13),
-                      ),
-                      child: const Text('Clear'),
-                    ),
-                  ],
-                )
-              else
-                const SizedBox.shrink(),
 
-              const SizedBox(height: 14),
-
-              // SPECIAL CV CARD (replaces the normal grid when cvPricing exists)
-              if (showCvPricingCard) ...[
-                CvPricingBrandCard(
-                  key: ValueKey<String>('cv_${payload.active.subdetailId}_$currency'),
-                  subdetailId: payload.active.subdetailId,
-                  initialState: (() {
-                    final flow = ref.read(onlineFlowProvider).brand;
-                    if (flow == null || flow.routeKey != _flowRouteKey) return null;
-                    final cv = flow.cvPricingState;
-                    if (cv == null || cv.subdetailId != payload.active.subdetailId) {
-                      return null;
-                    }
-                    return cv;
-                  })(),
-                  onStateChanged: (value) {
-                    _scheduleCvPricingStatePersist(value);
+                        const SizedBox(height: 6),
+                      ],
+                    );
                   },
-                  cvPricing: payload.active.cvPricing,
-                  maxSlaves: payload.active.maxSlaves,
-                  slaveCustomerPriceDay: payload.active.slaveCustomerPriceDay,
-                  activeBrand: payload.active.brands.isNotEmpty
-                      ? payload.active.brands.first
-                      : null,
-                  onHistorySearch: (q) {
-                    // Optional: wire to a backend endpoint if/when available.
-                  },
-                  // Replace the in-card Order button with the page-level Next.
-                  showOrderButton: false,
-                  submitSignal: _cvSubmitPulse,
-                  onValidChanged: (v) {
-                    if (_cvValidNotifier.value == v) return;
-                    _cvValidNotifier.value = v;
-                  },
-                  onOrder: (draft) {
-                    if (!mounted) return;
+                );
 
-                    // Store criteria_info for the next step (purchase page).
-                    final ci = draft['criteria_info'];
-                    ref.read(onlinePurchaseCriteriaProvider.notifier).state =
-                        (ci is Map) ? ci.cast<String, dynamic>() : null;
+                if (isMobile) return body;
 
-                    // Select the (single) CV brand in this tab.
-                    if (payload.active.brands.isNotEmpty) {
-                      final b = payload.active.brands.first;
-                      ref.read(onlineBrandSelectionProvider.notifier).state =
-                          OnlineBrandSelection(
-                        brandId: b.id,
-                        subdetailId: payload.active.subdetailId,
-                      );
-                    }
-
-                    // Go to purchase.
-                    context.go(R.purchase);
-                  },
-                ),
-              ] else if (!hasInfo) ...[
-                if (brands.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 30),
-                    child: Center(child: Text('No brands found.')),
-                  )
-                else
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: brands.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 460,
-                      mainAxisExtent: 180,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                    ),
-                    itemBuilder: (context, i) {
-                      final b = brands[i];
-                      final isSelected = selection != null &&
-                          selection.brandId == b.id &&
-                          selection.subdetailId == payload.active.subdetailId;
-
-                      return OnlineBrandCard(
-                        brand: b,
-                        mainLogoUrl: payload.groupDetail.avatar,
-                        subdetailLabel: activeTab?.name ?? '',
-                        selected: isSelected,
-                        onTap: () {
-                          // Clear any previous criteria_info (only CV flow sets it).
-                          ref.read(onlinePurchaseCriteriaProvider.notifier).state = null;
-
-                          ref.read(onlineBrandSelectionProvider.notifier).state =
-                              OnlineBrandSelection(
-                            brandId: b.id,
-                            subdetailId: payload.active.subdetailId,
-                          );
-
-                          // Non-CV flow: open Purchase immediately.
-                          context.go(R.purchase);
-                        },
-                      );
-                    },
+                // Desktop/tablet: avoid full-width stretching.
+                // Keep the layout consistent with card sizing (maxCrossAxisExtent ~460).
+                return Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1120),
+                    child: body,
                   ),
-              ] else ...[
-                // hasInfo grid (unchanged)
-                if (_customerInfo?.success == true) ...[
-                  if (brands.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 30),
-                      child: Center(
-                        child: Text('No available brands for this account.'),
-                      ),
-                    )
-                  else
-                    GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: brands.length,
-                      gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 460,
-                        mainAxisExtent: 180,
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
-                      ),
-                      itemBuilder: (context, i) {
-                        final b = brands[i];
-                        final isSelected = selection != null &&
-                            selection.brandId == b.id &&
-                            selection.subdetailId == payload.active.subdetailId;
-
-                        final totalRaw =
-                            ((_customerInfo?.data?['total_amount_cur'] ??
-                                    _customerInfo?.data?['total'] ??
-                                    ''))
-                                .toString()
-                                .trim();
-
-                        return OnlineBrandCard(
-                          brand: b,
-                          mainLogoUrl: payload.groupDetail.avatar,
-                          subdetailLabel: activeTab?.name ?? '',
-                          overridePriceRaw:
-                              totalRaw.isNotEmpty ? totalRaw : null,
-                          overridePriceCurrency: currency,
-                          selected: isSelected,
-                          onTap: () {
-                            // Persist has_info so the purchase flow and backend can treat it
-                            // similarly to CV (criteria_info present).
-                            final infoState = ref.read(onlineCustomerInfoProvider);
-                            final merged = <String, dynamic>{'has_info': true};
-                            final d = infoState?.response.data;
-                            if (d != null && d.isNotEmpty) {
-                              merged.addAll(d);
-                            }
-                            if (infoState != null &&
-                                !merged.containsKey('account_number') &&
-                                infoState.accountNumber.trim().isNotEmpty) {
-                              merged['account_number'] = infoState.accountNumber.trim();
-                            }
-                            ref.read(onlinePurchaseCriteriaProvider.notifier).state = merged;
-
-                            ref.read(onlineBrandSelectionProvider.notifier).state =
-                                OnlineBrandSelection(
-                              brandId: b.id,
-                              subdetailId: payload.active.subdetailId,
-                            );
-
-                            // has_info flow: open Purchase immediately.
-                            context.go(R.purchase);
-                          },
-                        );
-                      },
-                    ),
-                ],
-              ],
-
-              const SizedBox(height: 6),
-            ],
-              );
-            },
-          );
-
-          if (isMobile) return body;
-
-          // Desktop/tablet: avoid full-width stretching.
-          // Keep the layout consistent with card sizing (maxCrossAxisExtent ~460).
-          return Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1120),
-              child: body,
+                );
+              },
             ),
-          );
-        },
-      ),
-      ),
+          ),
         );
       },
     );
@@ -1218,7 +1268,7 @@ class _TabsRow extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: ChoiceChip(
-                  label: Text(t.name.toUpperCase()),
+                  label: Text(t.displayName.toUpperCase()),
                   selected: t.id == activeId,
                   selectedColor: const Color(0xFFB3261E),
                   labelStyle: TextStyle(

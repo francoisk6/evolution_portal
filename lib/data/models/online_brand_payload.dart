@@ -57,6 +57,12 @@ class OnlineSubdetailTab {
     required this.brandCount,
   });
 
+  String get displayName {
+    final altLabel = alt.trim();
+    if (altLabel.isNotEmpty) return altLabel;
+    return name.trim();
+  }
+
   factory OnlineSubdetailTab.fromJson(Map<String, dynamic> j) =>
       OnlineSubdetailTab(
         id: j['id'] is int ? j['id'] as int : int.tryParse('${j['id']}') ?? 0,
@@ -79,8 +85,8 @@ class OnlineCardTheme {
   final String themeType; // e.g. "triple"
   final int angleDeg; // CSS-style angle: 0=up, 90=right
   final String colorFrom; // "#RRGGBB" or "#AARRGGBB"
-  final String colorMid;  // optional
-  final String colorTo;   // "#RRGGBB" or "#AARRGGBB"
+  final String colorMid; // optional
+  final String colorTo; // "#RRGGBB" or "#AARRGGBB"
   final String fontColor; // "#RRGGBB" or "#AARRGGBB"
 
   const OnlineCardTheme({
