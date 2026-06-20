@@ -5,7 +5,8 @@ import '../../app/app_scroll_behavior.dart';
 import '../../data/models/prepaid_stock.dart';
 import '../../services/prepaid_stock_service.dart';
 import '../../state/session_provider.dart';
-import '../../widgets/page_action_bar.dart' show PageAction, PageActions;
+import '../../widgets/page_action_bar.dart'
+    show PageAction, PageActions, pageActions;
 
 class _ComboBoxOption<T> {
   final T value;
@@ -485,23 +486,28 @@ class _PrepaidStockPageState extends ConsumerState<PrepaidStockPage> {
 
   // ───────────────── cascading filter options ─────────────────
 
-  // Rows of the universe that match the currently-selected parent filters,
-  // up to (but excluding) [level]: 0=sector, 1=category, 2=product, 3=brand.
-  Iterable<PrepaidStockRow> _rowsForLevel(int level) {
+  // Rows of the universe matching the given parent selections, up to (but
+  // excluding) [level]: 0=sector, 1=category, 2=product, 3=brand.
+  Iterable<PrepaidStockRow> _rowsForLevel(
+    int level,
+    List<int> sectorIds,
+    List<int> categoryIds,
+    List<int> productIds,
+  ) {
     return _universe.where((row) {
       if (level > 0 &&
-          _sectorIds.isNotEmpty &&
-          !_sectorIds.contains(row.sector?.id)) {
+          sectorIds.isNotEmpty &&
+          !sectorIds.contains(row.sector?.id)) {
         return false;
       }
       if (level > 1 &&
-          _categoryIds.isNotEmpty &&
-          !_categoryIds.contains(row.category?.id)) {
+          categoryIds.isNotEmpty &&
+          !categoryIds.contains(row.category?.id)) {
         return false;
       }
       if (level > 2 &&
-          _productIds.isNotEmpty &&
-          !_productIds.contains(row.product?.id)) {
+          productIds.isNotEmpty &&
+          !productIds.contains(row.product?.id)) {
         return false;
       }
       return true;
@@ -510,11 +516,15 @@ class _PrepaidStockPageState extends ConsumerState<PrepaidStockPage> {
 
   List<_ComboBoxOption<int>> _optionsFor(
     int level,
+    List<int> sectorIds,
+    List<int> categoryIds,
+    List<int> productIds,
     PrepaidStockRef? Function(PrepaidStockRow row) pick,
   ) {
     final seen = <int>{};
     final options = <_ComboBoxOption<int>>[];
-    for (final row in _rowsForLevel(level)) {
+    for (final row
+        in _rowsForLevel(level, sectorIds, categoryIds, productIds)) {
       final ref = pick(row);
       if (ref == null || seen.contains(ref.id)) continue;
       seen.add(ref.id);
@@ -533,49 +543,30 @@ class _PrepaidStockPageState extends ConsumerState<PrepaidStockPage> {
 
   // Drop selections that no longer exist in the universe / parent scope.
   void _reconcileSelections() {
-    _sectorIds = _retainValid(_sectorIds, _optionsFor(0, (r) => r.sector));
-    _categoryIds =
-        _retainValid(_categoryIds, _optionsFor(1, (r) => r.category));
-    _productIds = _retainValid(_productIds, _optionsFor(2, (r) => r.product));
-    _brandIds = _retainValid(_brandIds, _optionsFor(3, (r) => r.brand));
+    _sectorIds = _retainValid(_sectorIds,
+        _optionsFor(0, _sectorIds, _categoryIds, _productIds, (r) => r.sector));
+    _categoryIds = _retainValid(
+        _categoryIds,
+        _optionsFor(
+            1, _sectorIds, _categoryIds, _productIds, (r) => r.category));
+    _productIds = _retainValid(
+        _productIds,
+        _optionsFor(
+            2, _sectorIds, _categoryIds, _productIds, (r) => r.product));
+    _brandIds = _retainValid(_brandIds,
+        _optionsFor(3, _sectorIds, _categoryIds, _productIds, (r) => r.brand));
   }
 
-  Future<void> _handleSectorsChanged(List<int> values) async {
-    setState(() {
-      _sectorIds = values.toSet().toList()..sort();
-      _categoryIds = <int>[];
-      _productIds = <int>[];
-      _brandIds = <int>[];
-      _reconcileSelections();
-    });
-    await _loadList();
-  }
-
-  Future<void> _handleCategoriesChanged(List<int> values) async {
-    setState(() {
-      _categoryIds = values.toSet().toList()..sort();
-      _productIds = <int>[];
-      _brandIds = <int>[];
-      _reconcileSelections();
-    });
-    await _loadList();
-  }
-
-  Future<void> _handleProductsChanged(List<int> values) async {
-    setState(() {
-      _productIds = values.toSet().toList()..sort();
-      _brandIds = <int>[];
-      _reconcileSelections();
-    });
-    await _loadList();
-  }
-
-  Future<void> _handleBrandsChanged(List<int> values) async {
-    setState(() {
-      _brandIds = values.toSet().toList()..sort();
-      _reconcileSelections();
-    });
-    await _loadList();
+  int _activeFilterCount() {
+    var n = 0;
+    if (_sectorIds.isNotEmpty) n++;
+    if (_categoryIds.isNotEmpty) n++;
+    if (_productIds.isNotEmpty) n++;
+    if (_brandIds.isNotEmpty) n++;
+    if (_searchCtl.text.trim().isNotEmpty) n++;
+    if (_consumed != 'false') n++;
+    if (_order != 'quantity') n++;
+    return n;
   }
 
   // ───────────────── UI ─────────────────
@@ -622,30 +613,47 @@ class _PrepaidStockPageState extends ConsumerState<PrepaidStockPage> {
           ),
         ),
         const SizedBox(width: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        Builder(builder: (context) {
+          final filterCount = _activeFilterCount();
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+                onPressed: _loadingUniverse ? null : _openFilters,
+                icon: const Icon(Icons.filter_list, size: 18),
+                label: Text(
+                  filterCount > 0 ? 'Filter ($filterCount)' : 'Filter',
+                  style: const TextStyle(fontSize: 12),
+                ),
               ),
-              onPressed: _loadingUniverse || _loadingList ? null : _clearFilters,
-              icon: const Icon(Icons.filter_alt_off, size: 18),
-              label: const Text('Clear', style: TextStyle(fontSize: 12)),
-            ),
-            FilledButton.icon(
-              style: FilledButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+                onPressed:
+                    _loadingUniverse || _loadingList ? null : _clearFilters,
+                icon: const Icon(Icons.filter_alt_off, size: 18),
+                label: const Text('Clear', style: TextStyle(fontSize: 12)),
               ),
-              onPressed: _loadingUniverse || _loadingList ? null : _refreshAll,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Refresh', style: TextStyle(fontSize: 12)),
-            ),
-          ],
-        ),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+                onPressed:
+                    _loadingUniverse || _loadingList ? null : _refreshAll,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Refresh', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          );
+        }),
       ],
     );
   }
@@ -697,176 +705,296 @@ class _PrepaidStockPageState extends ConsumerState<PrepaidStockPage> {
     );
   }
 
-  Widget _buildFiltersCard(BuildContext context) {
-    return _sectionCard(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final width = constraints.maxWidth;
-            final columns = width >= 1180
-                ? 4
-                : width >= 820
-                    ? 3
-                    : width >= 540
-                        ? 2
-                        : 1;
-            final fieldWidth = columns == 1
-                ? width
-                : (width - ((columns - 1) * 10)) / columns;
+  Widget _fieldGap() => const SizedBox(height: 12);
 
-            Widget box(Widget child) =>
-                SizedBox(width: fieldWidth, child: child);
+  // Filters live in a popup (like Transaction History) so the grid keeps the
+  // full screen height. Edits are staged locally and committed on "Apply".
+  Future<void> _openFilters() async {
+    var tmpSectors = List<int>.from(_sectorIds);
+    var tmpCategories = List<int>.from(_categoryIds);
+    var tmpProducts = List<int>.from(_productIds);
+    var tmpBrands = List<int>.from(_brandIds);
+    var tmpConsumed = _consumed;
+    var tmpOrder = _order;
+    final searchCtl = TextEditingController(text: _searchCtl.text);
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Filters',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                        color: _fg,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Sector → category → product → brand cascade. Selecting a parent narrows the choices below it.',
-                  style: TextStyle(fontSize: 11.5, color: _fgSoft, height: 1.2),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    box(
-                      _SearchableMultiSelectField<int>(
-                        label: 'Sector',
-                        hintText: 'All sectors',
-                        values: _sectorIds,
-                        options: _optionsFor(0, (r) => r.sector),
-                        onChanged: _handleSectorsChanged,
-                      ),
+    // Hide the floating page actions while the sheet is open.
+    final savedActions = List<PageAction>.from(pageActions.value);
+    pageActions.value = const <PageAction>[];
+
+    List<int> retain(List<int> ids, List<_ComboBoxOption<int>> opts) {
+      if (ids.isEmpty) return <int>[];
+      final allowed = opts.map((e) => e.value).toSet();
+      return ids.where(allowed.contains).toList();
+    }
+
+    void reconcileTmp() {
+      tmpSectors = retain(
+          tmpSectors,
+          _optionsFor(
+              0, tmpSectors, tmpCategories, tmpProducts, (r) => r.sector));
+      tmpCategories = retain(
+          tmpCategories,
+          _optionsFor(
+              1, tmpSectors, tmpCategories, tmpProducts, (r) => r.category));
+      tmpProducts = retain(
+          tmpProducts,
+          _optionsFor(
+              2, tmpSectors, tmpCategories, tmpProducts, (r) => r.product));
+      tmpBrands = retain(
+          tmpBrands,
+          _optionsFor(
+              3, tmpSectors, tmpCategories, tmpProducts, (r) => r.brand));
+    }
+
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (ctx) {
+          return StatefulBuilder(
+            builder: (ctx, setModalState) {
+              return SafeArea(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    12,
+                    6,
+                    12,
+                    MediaQuery.of(ctx).viewInsets.bottom + 12,
+                  ),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(ctx).size.height * 0.82,
                     ),
-                    box(
-                      _SearchableMultiSelectField<int>(
-                        label: 'Category',
-                        hintText: 'All categories',
-                        values: _categoryIds,
-                        options: _optionsFor(1, (r) => r.category),
-                        onChanged: _handleCategoriesChanged,
-                      ),
-                    ),
-                    box(
-                      _SearchableMultiSelectField<int>(
-                        label: 'Product',
-                        hintText: 'All products',
-                        values: _productIds,
-                        options: _optionsFor(2, (r) => r.product),
-                        onChanged: _handleProductsChanged,
-                      ),
-                    ),
-                    box(
-                      _SearchableMultiSelectField<int>(
-                        label: 'Brand',
-                        hintText: 'All brands',
-                        values: _brandIds,
-                        options: _optionsFor(3, (r) => r.brand),
-                        onChanged: _handleBrandsChanged,
-                      ),
-                    ),
-                    box(
-                      TextField(
-                        controller: _searchCtl,
-                        style: const TextStyle(fontSize: 12),
-                        textInputAction: TextInputAction.search,
-                        decoration: InputDecoration(
-                          labelText: 'Search',
-                          hintText: 'Brand name / alt',
-                          isDense: true,
-                          prefixIcon: const Icon(Icons.search, size: 18),
-                          suffixIcon: _searchCtl.text.isEmpty
-                              ? null
-                              : IconButton(
-                                  tooltip: 'Clear search',
-                                  icon: const Icon(Icons.clear, size: 18),
-                                  onPressed: () {
-                                    _searchCtl.clear();
-                                    _loadList();
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Filters',
+                          style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900,
+                                color: _fg,
+                              ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Sector → category → product → brand cascade. Selecting a parent narrows the choices below it.',
+                          style: TextStyle(
+                              fontSize: 11.5, color: _fgSoft, height: 1.2),
+                        ),
+                        const SizedBox(height: 12),
+                        Flexible(
+                          child: SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _SearchableMultiSelectField<int>(
+                                  label: 'Sector',
+                                  hintText: 'All sectors',
+                                  values: tmpSectors,
+                                  options: _optionsFor(0, tmpSectors,
+                                      tmpCategories, tmpProducts, (r) => r.sector),
+                                  onChanged: (v) => setModalState(() {
+                                    tmpSectors = v.toSet().toList()..sort();
+                                    tmpCategories = <int>[];
+                                    tmpProducts = <int>[];
+                                    tmpBrands = <int>[];
+                                    reconcileTmp();
+                                  }),
+                                ),
+                                _fieldGap(),
+                                _SearchableMultiSelectField<int>(
+                                  label: 'Category',
+                                  hintText: 'All categories',
+                                  values: tmpCategories,
+                                  options: _optionsFor(1, tmpSectors,
+                                      tmpCategories, tmpProducts, (r) => r.category),
+                                  onChanged: (v) => setModalState(() {
+                                    tmpCategories = v.toSet().toList()..sort();
+                                    tmpProducts = <int>[];
+                                    tmpBrands = <int>[];
+                                    reconcileTmp();
+                                  }),
+                                ),
+                                _fieldGap(),
+                                _SearchableMultiSelectField<int>(
+                                  label: 'Product',
+                                  hintText: 'All products',
+                                  values: tmpProducts,
+                                  options: _optionsFor(2, tmpSectors,
+                                      tmpCategories, tmpProducts, (r) => r.product),
+                                  onChanged: (v) => setModalState(() {
+                                    tmpProducts = v.toSet().toList()..sort();
+                                    tmpBrands = <int>[];
+                                    reconcileTmp();
+                                  }),
+                                ),
+                                _fieldGap(),
+                                _SearchableMultiSelectField<int>(
+                                  label: 'Brand',
+                                  hintText: 'All brands',
+                                  values: tmpBrands,
+                                  options: _optionsFor(3, tmpSectors,
+                                      tmpCategories, tmpProducts, (r) => r.brand),
+                                  onChanged: (v) => setModalState(() {
+                                    tmpBrands = v.toSet().toList()..sort();
+                                    reconcileTmp();
+                                  }),
+                                ),
+                                _fieldGap(),
+                                TextField(
+                                  controller: searchCtl,
+                                  style: const TextStyle(fontSize: 12),
+                                  textInputAction: TextInputAction.search,
+                                  decoration: InputDecoration(
+                                    labelText: 'Search',
+                                    hintText: 'Brand name / alt',
+                                    isDense: true,
+                                    prefixIcon:
+                                        const Icon(Icons.search, size: 18),
+                                    suffixIcon: searchCtl.text.isEmpty
+                                        ? null
+                                        : IconButton(
+                                            tooltip: 'Clear search',
+                                            icon:
+                                                const Icon(Icons.clear, size: 18),
+                                            onPressed: () {
+                                              searchCtl.clear();
+                                              setModalState(() {});
+                                            },
+                                          ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 12),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  onChanged: (_) => setModalState(() {}),
+                                ),
+                                _fieldGap(),
+                                DropdownButtonFormField<String>(
+                                  initialValue: tmpConsumed,
+                                  style: const TextStyle(fontSize: 12),
+                                  decoration: InputDecoration(
+                                    labelText: 'Consumed',
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 12),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(
+                                        value: 'false',
+                                        child: Text('Available only')),
+                                    DropdownMenuItem(
+                                        value: 'true',
+                                        child: Text('Consumed only')),
+                                    DropdownMenuItem(
+                                        value: 'all', child: Text('All')),
+                                  ],
+                                  onChanged: (v) {
+                                    if (v == null) return;
+                                    setModalState(() => tmpConsumed = v);
                                   },
                                 ),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 12),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                                _fieldGap(),
+                                DropdownButtonFormField<String>(
+                                  initialValue: tmpOrder,
+                                  style: const TextStyle(fontSize: 12),
+                                  decoration: InputDecoration(
+                                    labelText: 'Order',
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 12),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(
+                                        value: 'quantity',
+                                        child: Text('Quantity (high → low)')),
+                                    DropdownMenuItem(
+                                        value: 'name',
+                                        child: Text('Name (A → Z)')),
+                                  ],
+                                  onChanged: (v) {
+                                    if (v == null) return;
+                                    setModalState(() => tmpOrder = v);
+                                  },
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        onChanged: (_) => setState(() {}),
-                        onSubmitted: (_) => _loadList(),
-                      ),
-                    ),
-                    box(
-                      DropdownButtonFormField<String>(
-                        initialValue: _consumed,
-                        style: const TextStyle(fontSize: 12),
-                        decoration: InputDecoration(
-                          labelText: 'Consumed',
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 12),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => setModalState(() {
+                                  tmpSectors = <int>[];
+                                  tmpCategories = <int>[];
+                                  tmpProducts = <int>[];
+                                  tmpBrands = <int>[];
+                                  tmpConsumed = 'false';
+                                  tmpOrder = 'quantity';
+                                  searchCtl.clear();
+                                }),
+                                icon: const Icon(Icons.filter_alt_off, size: 18),
+                                label: const Text('Clear',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700)),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: FilledButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    _sectorIds = tmpSectors.toSet().toList()
+                                      ..sort();
+                                    _categoryIds = tmpCategories.toSet().toList()
+                                      ..sort();
+                                    _productIds = tmpProducts.toSet().toList()
+                                      ..sort();
+                                    _brandIds = tmpBrands.toSet().toList()..sort();
+                                    _consumed = tmpConsumed;
+                                    _order = tmpOrder;
+                                    _searchCtl.text = searchCtl.text;
+                                    _reconcileSelections();
+                                  });
+                                  Navigator.pop(ctx);
+                                  _loadList();
+                                },
+                                icon: const Icon(Icons.check, size: 18),
+                                label: const Text('Apply',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700)),
+                              ),
+                            ),
+                          ],
                         ),
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'false', child: Text('Available only')),
-                          DropdownMenuItem(
-                              value: 'true', child: Text('Consumed only')),
-                          DropdownMenuItem(value: 'all', child: Text('All')),
-                        ],
-                        onChanged: (v) {
-                          if (v == null) return;
-                          setState(() => _consumed = v);
-                          _loadList();
-                        },
-                      ),
+                      ],
                     ),
-                    box(
-                      DropdownButtonFormField<String>(
-                        initialValue: _order,
-                        style: const TextStyle(fontSize: 12),
-                        decoration: InputDecoration(
-                          labelText: 'Order',
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 12),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'quantity',
-                              child: Text('Quantity (high → low)')),
-                          DropdownMenuItem(
-                              value: 'name', child: Text('Name (A → Z)')),
-                        ],
-                        onChanged: (v) {
-                          if (v == null) return;
-                          setState(() => _order = v);
-                          _loadList();
-                        },
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      pageActions.value = savedActions;
+      searchCtl.dispose();
+    }
   }
 
   Widget _buildListHeaderRow(BuildContext context) {
@@ -1287,7 +1415,13 @@ class _PrepaidStockPageState extends ConsumerState<PrepaidStockPage> {
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(sessionProvider);
+    final filterCount = _activeFilterCount();
     final actions = <PageAction>[
+      PageAction(
+        label: filterCount > 0 ? 'Filter ($filterCount)' : 'Filter',
+        icon: Icons.filter_list,
+        onTap: _openFilters,
+      ),
       PageAction(label: 'Refresh', icon: Icons.refresh, onTap: _refreshAll),
       PageAction(
           label: 'Clear', icon: Icons.filter_alt_off, onTap: _clearFilters),
@@ -1316,8 +1450,6 @@ class _PrepaidStockPageState extends ConsumerState<PrepaidStockPage> {
           _buildHeader(context),
           ..._buildStatusBanners(context),
           const SizedBox(height: 12),
-          _buildFiltersCard(context),
-          const SizedBox(height: 12),
           Expanded(child: _buildGridCard(context)),
         ],
       ),
@@ -1340,8 +1472,6 @@ class _PrepaidStockPageState extends ConsumerState<PrepaidStockPage> {
             children: [
               _buildHeader(context),
               ..._buildStatusBanners(context),
-              const SizedBox(height: 12),
-              _buildFiltersCard(context),
               const SizedBox(height: 12),
               _buildCardsCard(context),
             ],
