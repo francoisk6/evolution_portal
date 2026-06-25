@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import '../../../data/models/batch_refill_models.dart';
 import '../../../routing/route_names.dart';
 import '../../../services/batch_refill_service.dart';
+import '../../../state/page_refresh_provider.dart';
 import '../../../utils/file_download.dart';
 import '../../../utils/notify.dart';
 import 'batch_record_edit_sheet.dart';
@@ -24,21 +25,22 @@ class _Col {
 }
 
 const _kCols = [
-  _Col('#', 52),
-  _Col('Cust.Name', 160),
-  _Col('Cust.No', 100),
-  _Col('Product', 150),
-  _Col('Brand Code', 90),
-  _Col('Brand', 180),
-  _Col('DSL ID', 90),
-  _Col('Code', 80),
-  _Col('D. Price', 110),
-  _Col('Cust. Price', 110),
-  _Col('Currency', 80),
-  _Col('Active', 110),
-  _Col('Notes', 210),
-  _Col('RF-Date', 170),
+  _Col('#', 40),
+  _Col('Cust.Name', 140),
+  _Col('Cust.No', 88),
+  _Col('Product', 120),
+  _Col('Brand Code', 75),
+  _Col('Brand', 155),
+  _Col('DSL ID', 78),
+  _Col('D. Price', 92),
+  _Col('Cust. Price', 92),
+  _Col('Currency', 62),
+  _Col('Active', 95),
+  _Col('Notes', 185),
+  _Col('RF-Date', 148),
 ];
+
+const double _kRowH = 36;
 
 double get _kTotalWidth => _kCols.fold(0.0, (s, c) => s + c.width);
 
@@ -360,6 +362,11 @@ class _BatchGridPageState extends ConsumerState<BatchGridPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(pageRefreshPulseProvider, (_, __) {
+      ref.invalidate(batchBrandsProvider);
+      ref.read(batchRecordsProvider(widget.sheetId).notifier).refresh();
+    });
+
     final recordsAsync =
         ref.watch(batchRecordsProvider(widget.sheetId));
     final balancesAsync = ref.watch(batchBalancesProvider);
@@ -458,9 +465,12 @@ class _BatchGridPageState extends ConsumerState<BatchGridPage> {
             exporting: _exporting,
             onCancel: () => context.go(R.adminBatchRefill),
             onExport: () => _exportCsv(records),
-            onSave: () => ref
-                .read(batchRecordsProvider(widget.sheetId).notifier)
-                .refresh(),
+            onSave: () async {
+              ref.invalidate(batchBrandsProvider);
+              await ref
+                  .read(batchRecordsProvider(widget.sheetId).notifier)
+                  .refresh();
+            },
             onCheck: _check,
             onSubmit: _submit,
           ),
@@ -541,7 +551,7 @@ class _Header extends StatelessWidget {
     final surface =
         Theme.of(context).colorScheme.surfaceContainerHighest;
     return Container(
-      height: 44,
+      height: _kRowH,
       color: surface,
       child: Row(
         children: _kCols.map((col) {
@@ -603,14 +613,12 @@ class _EditableRowState extends State<_EditableRow> {
   late TextEditingController _nameCtrl;
   late TextEditingController _numCtrl;
   late TextEditingController _dslCtrl;
-  late TextEditingController _codeCtrl;
   late TextEditingController _dPriceCtrl;
   late TextEditingController _cPriceCtrl;
 
   late FocusNode _nameFn;
   late FocusNode _numFn;
   late FocusNode _dslFn;
-  late FocusNode _codeFn;
   late FocusNode _dPriceFn;
   late FocusNode _cPriceFn;
 
@@ -625,7 +633,6 @@ class _EditableRowState extends State<_EditableRow> {
       _nameFn.hasFocus ||
       _numFn.hasFocus ||
       _dslFn.hasFocus ||
-      _codeFn.hasFocus ||
       _dPriceFn.hasFocus ||
       _cPriceFn.hasFocus;
 
@@ -636,7 +643,6 @@ class _EditableRowState extends State<_EditableRow> {
     _nameCtrl = TextEditingController(text: r.clientname);
     _numCtrl = TextEditingController(text: r.clientnumber);
     _dslCtrl = TextEditingController(text: r.clientDsl);
-    _codeCtrl = TextEditingController(text: r.code);
     _dPriceCtrl = TextEditingController(text: r.dealerPrice);
     _cPriceCtrl = TextEditingController(text: r.customerPrice);
     _status = r.clientActive;
@@ -650,7 +656,6 @@ class _EditableRowState extends State<_EditableRow> {
     _nameFn = _fn();
     _numFn = _fn();
     _dslFn = _fn();
-    _codeFn = _fn();
     _dPriceFn = _fn();
     _cPriceFn = _fn();
   }
@@ -688,12 +693,12 @@ class _EditableRowState extends State<_EditableRow> {
   void dispose() {
     _commitTimer?.cancel();
     for (final c in [
-      _nameCtrl, _numCtrl, _dslCtrl, _codeCtrl, _dPriceCtrl, _cPriceCtrl
+      _nameCtrl, _numCtrl, _dslCtrl, _dPriceCtrl, _cPriceCtrl
     ]) {
       c.dispose();
     }
     for (final f in [
-      _nameFn, _numFn, _dslFn, _codeFn, _dPriceFn, _cPriceFn
+      _nameFn, _numFn, _dslFn, _dPriceFn, _cPriceFn
     ]) {
       f.dispose();
     }
@@ -706,7 +711,7 @@ class _EditableRowState extends State<_EditableRow> {
       'clientname': _nameCtrl.text.trim(),
       'clientnumber': _numCtrl.text.trim(),
       'client_dsl': _dslCtrl.text.trim(),
-      'code': _codeCtrl.text.trim(),
+      'code': widget.record.code,
       'client_active': _status,
       'dealer_price': _dPriceCtrl.text.trim(),
       'customer_price': _cPriceCtrl.text.trim(),
@@ -722,7 +727,6 @@ class _EditableRowState extends State<_EditableRow> {
     return d['clientname'] != r.clientname ||
         d['clientnumber'] != r.clientnumber ||
         d['client_dsl'] != r.clientDsl ||
-        d['code'] != r.code ||
         d['client_active'] != r.clientActive ||
         d['dealer_price'] != r.dealerPrice ||
         d['customer_price'] != r.customerPrice ||
@@ -833,11 +837,8 @@ class _EditableRowState extends State<_EditableRow> {
                 // ─ DSL ID ──────────────────────────────────────────────
                 _editCell(_dslCtrl, _kCols[6].width, _dslFn),
 
-                // ─ Code ────────────────────────────────────────────────
-                _editCell(_codeCtrl, _kCols[7].width, _codeFn),
-
                 // ─ D.Price ─────────────────────────────────────────────
-                _editCell(_dPriceCtrl, _kCols[8].width, _dPriceFn,
+                _editCell(_dPriceCtrl, _kCols[7].width, _dPriceFn,
                     textAlign: TextAlign.right,
                     keyboardType:
                         const TextInputType.numberWithOptions(
@@ -848,7 +849,7 @@ class _EditableRowState extends State<_EditableRow> {
                     ]),
 
                 // ─ Cust.Price ──────────────────────────────────────────
-                _editCell(_cPriceCtrl, _kCols[9].width, _cPriceFn,
+                _editCell(_cPriceCtrl, _kCols[8].width, _cPriceFn,
                     textAlign: TextAlign.right,
                     keyboardType:
                         const TextInputType.numberWithOptions(
@@ -859,17 +860,17 @@ class _EditableRowState extends State<_EditableRow> {
                     ]),
 
                 // ─ Currency (read-only) ────────────────────────────────
-                _readCell(currency, _kCols[10].width,
+                _readCell(currency, _kCols[9].width,
                     align: Alignment.center),
 
                 // ─ Active / status dropdown ────────────────────────────
                 _statusCell(),
 
                 // ─ Notes (read-only) ───────────────────────────────────
-                _readCell(r.note, _kCols[12].width),
+                _readCell(r.note, _kCols[11].width),
 
                 // ─ RF-Date (read-only) ─────────────────────────────────
-                _readCell(_fmtDate(r.refillDate), _kCols[13].width),
+                _readCell(_fmtDate(r.refillDate), _kCols[12].width),
               ],
             ),
           ),
@@ -887,7 +888,7 @@ class _EditableRowState extends State<_EditableRow> {
   Widget _numCell(int index, bool isSelected) {
     return SizedBox(
       width: _kCols[0].width,
-      height: 44,
+      height: _kRowH,
       child: InkWell(
         onTap: widget.selectMode ? widget.onToggleSelect : null,
         child: Container(
@@ -913,7 +914,7 @@ class _EditableRowState extends State<_EditableRow> {
                   : Text(
                       '${index + 1}',
                       style: TextStyle(
-                          fontSize: 11, color: Colors.grey.shade600),
+                          fontSize: 10, color: Colors.grey.shade600),
                     ),
         ),
       ),
@@ -932,7 +933,7 @@ class _EditableRowState extends State<_EditableRow> {
     final focused = fn.hasFocus;
     return SizedBox(
       width: width,
-      height: 44,
+      height: _kRowH,
       child: Container(
         decoration: BoxDecoration(
           color: focused
@@ -957,7 +958,7 @@ class _EditableRowState extends State<_EditableRow> {
                       ? Alignment.centerRight
                       : Alignment.centerLeft,
                   child: Text(ctrl.text,
-                      style: const TextStyle(fontSize: 12),
+                      style: const TextStyle(fontSize: 11),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1),
                 ),
@@ -968,12 +969,12 @@ class _EditableRowState extends State<_EditableRow> {
                 textAlign: textAlign,
                 keyboardType: keyboardType,
                 inputFormatters: inputFormatters,
-                style: const TextStyle(fontSize: 12),
+                style: const TextStyle(fontSize: 11),
                 mouseCursor: SystemMouseCursors.text,
                 decoration: const InputDecoration(
                   isDense: true,
                   contentPadding: EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 14),
+                      horizontal: 6, vertical: 10),
                   border: InputBorder.none,
                 ),
                 onSubmitted: (_) => _commit(),
@@ -986,7 +987,7 @@ class _EditableRowState extends State<_EditableRow> {
       {Alignment align = Alignment.centerLeft}) {
     return SizedBox(
       width: width,
-      height: 44,
+      height: _kRowH,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
@@ -995,7 +996,7 @@ class _EditableRowState extends State<_EditableRow> {
         ),
         alignment: align,
         child: Text(text,
-            style: const TextStyle(fontSize: 12),
+            style: const TextStyle(fontSize: 11),
             overflow: TextOverflow.ellipsis,
             maxLines: 1),
       ),
@@ -1003,10 +1004,10 @@ class _EditableRowState extends State<_EditableRow> {
   }
 
   Widget _brandCell(BatchRecord r) {
-    final label = _brand?.name ?? r.brandName;
+    final label = _brand?.alt ?? _brand?.name ?? r.brandName;
     return SizedBox(
       width: _kCols[5].width,
-      height: 44,
+      height: _kRowH,
       child: InkWell(
         onTap: _pickBrand,
         child: Container(
@@ -1019,7 +1020,7 @@ class _EditableRowState extends State<_EditableRow> {
             children: [
               Expanded(
                 child: Text(label,
-                    style: const TextStyle(fontSize: 12),
+                    style: const TextStyle(fontSize: 11),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1),
               ),
@@ -1034,8 +1035,8 @@ class _EditableRowState extends State<_EditableRow> {
 
   Widget _statusCell() {
     return SizedBox(
-      width: _kCols[11].width,
-      height: 44,
+      width: _kCols[10].width,
+      height: _kRowH,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 4),
         decoration: BoxDecoration(
@@ -1047,7 +1048,7 @@ class _EditableRowState extends State<_EditableRow> {
           child: DropdownButton<String>(
             value: _status,
             isDense: true,
-            style: TextStyle(fontSize: 12, color: _statusFg(_status), fontWeight: FontWeight.w600),
+            style: TextStyle(fontSize: 11, color: _statusFg(_status), fontWeight: FontWeight.w600),
             selectedItemBuilder: (_) => _kStatuses
                 .map((_) => Center(child: _StatusChip(status: _status)))
                 .toList(),
@@ -1056,7 +1057,7 @@ class _EditableRowState extends State<_EditableRow> {
                       value: s,
                       child: Text(s,
                           style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               color: _statusFg(s))),
                     ))
                 .toList(),
@@ -1088,7 +1089,7 @@ class _StatusChip extends StatelessWidget {
         status,
         style: TextStyle(
             color: _statusFg(status),
-            fontSize: 11,
+            fontSize: 10,
             fontWeight: FontWeight.w600),
         overflow: TextOverflow.ellipsis,
       ),
@@ -1307,6 +1308,7 @@ class _BrandPickerSheetState extends State<_BrandPickerSheet> {
           : widget.brands
               .where((b) =>
                   b.code.toLowerCase().contains(q) ||
+                  (b.alt ?? b.name).toLowerCase().contains(q) ||
                   b.name.toLowerCase().contains(q) ||
                   b.product.toLowerCase().contains(q))
               .toList();
@@ -1348,7 +1350,7 @@ class _BrandPickerSheetState extends State<_BrandPickerSheet> {
                         final b = _filtered[i];
                         return ListTile(
                           dense: true,
-                          title: Text('${b.code} – ${b.name}',
+                          title: Text('${b.code} – ${b.alt ?? b.name}',
                               style:
                                   const TextStyle(fontSize: 13)),
                           subtitle: Text(

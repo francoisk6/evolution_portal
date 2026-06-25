@@ -125,16 +125,22 @@ class BatchRecordsNotifier
   Future<BatchCheckResult> checkSheet() async {
     final result = await BatchRefillService.instance.checkSheet(arg);
     final current = state.value ?? [];
-    final resultMap = {for (final r in result.results) r.recordId: r};
-    state = AsyncData(
-      current.map((r) {
-        final res = resultMap[r.id];
-        if (res == null) return r;
-        final newStatus =
-            res.note == 'Ready' ? 'Refill' : r.clientActive;
-        return r.copyWith(clientActive: newStatus, note: res.note);
-      }).toList(),
-    );
+    if (result.records.isNotEmpty) {
+      final updatedMap = {for (final r in result.records) r.id: r};
+      state = AsyncData(
+        current.map((r) => updatedMap[r.id] ?? r).toList(),
+      );
+    } else {
+      final resultMap = {for (final r in result.results) r.recordId: r};
+      state = AsyncData(
+        current.map((r) {
+          final res = resultMap[r.id];
+          if (res == null) return r;
+          final newStatus = res.note == 'Ready' ? 'Refill' : r.clientActive;
+          return r.copyWith(clientActive: newStatus, note: res.note);
+        }).toList(),
+      );
+    }
     return result;
   }
 
@@ -142,14 +148,21 @@ class BatchRecordsNotifier
     final result =
         await BatchRefillService.instance.refillSheet(arg, pin);
     final current = state.value ?? [];
-    final resultMap = {for (final r in result.results) r.recordId: r};
-    state = AsyncData(
-      current.map((r) {
-        final res = resultMap[r.id];
-        if (res == null) return r;
-        return r.copyWith(clientActive: res.status, note: res.note);
-      }).toList(),
-    );
+    if (result.records.isNotEmpty) {
+      final updatedMap = {for (final r in result.records) r.id: r};
+      state = AsyncData(
+        current.map((r) => updatedMap[r.id] ?? r).toList(),
+      );
+    } else {
+      final resultMap = {for (final r in result.results) r.recordId: r};
+      state = AsyncData(
+        current.map((r) {
+          final res = resultMap[r.id];
+          if (res == null) return r;
+          return r.copyWith(clientActive: res.status, note: res.note);
+        }).toList(),
+      );
+    }
     return result;
   }
 }

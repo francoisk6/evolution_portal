@@ -432,7 +432,7 @@ class _BrandField extends StatelessWidget {
                               MainAxisAlignment.center,
                           children: [
                             Text(
-                              '${selected!.code} – ${selected!.name}',
+                              '${selected!.code} – ${selected!.alt ?? selected!.name}',
                               style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600),
@@ -531,6 +531,7 @@ class _BrandPickerSheetState extends State<_BrandPickerSheet> {
       } else {
         _filtered = widget.brands.where((b) {
           return b.code.toLowerCase().contains(q) ||
+              (b.alt ?? b.name).toLowerCase().contains(q) ||
               b.name.toLowerCase().contains(q) ||
               b.product.toLowerCase().contains(q);
         }).toList();
@@ -576,7 +577,7 @@ class _BrandPickerSheetState extends State<_BrandPickerSheet> {
                         return ListTile(
                           dense: true,
                           title: Text(
-                            '${b.code} – ${b.name}',
+                            '${b.code} – ${b.alt ?? b.name}',
                             style: const TextStyle(fontSize: 13),
                           ),
                           subtitle: Text(

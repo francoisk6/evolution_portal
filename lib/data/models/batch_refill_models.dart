@@ -238,12 +238,14 @@ class BatchCheckResult {
   final int valid;
   final int invalid;
   final List<BatchCheckRecordResult> results;
+  final List<BatchRecord> records;
 
   const BatchCheckResult({
     required this.checked,
     required this.valid,
     required this.invalid,
     required this.results,
+    this.records = const [],
   });
 
   factory BatchCheckResult.fromJson(Map<String, dynamic> j) =>
@@ -254,6 +256,9 @@ class BatchCheckResult {
         results: (j['results'] as List? ?? [])
             .map((e) => BatchCheckRecordResult.fromJson(
                 e as Map<String, dynamic>))
+            .toList(),
+        records: (j['records'] as List? ?? [])
+            .map((e) => BatchRecord.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
 }
@@ -282,12 +287,14 @@ class BatchRefillResult {
   final int success;
   final int failed;
   final List<BatchRefillRecordResult> results;
+  final List<BatchRecord> records;
 
   const BatchRefillResult({
     required this.processed,
     required this.success,
     required this.failed,
     required this.results,
+    this.records = const [],
   });
 
   factory BatchRefillResult.fromJson(Map<String, dynamic> j) =>
@@ -298,6 +305,9 @@ class BatchRefillResult {
         results: (j['results'] as List? ?? [])
             .map((e) => BatchRefillRecordResult.fromJson(
                 e as Map<String, dynamic>))
+            .toList(),
+        records: (j['records'] as List? ?? [])
+            .map((e) => BatchRecord.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
 }
