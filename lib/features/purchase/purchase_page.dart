@@ -1361,9 +1361,22 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
     required bool goHomeAfterSuccess,
   }) async {
     final tx = resp.transaction;
+    final clientName = _fullNameCtl.text.trim();
+    final clientLabel = tx == null
+        ? ''
+        : (clientName.isNotEmpty && tx.clientnumber.isNotEmpty
+            ? '$clientName (${tx.clientnumber})'
+            : (clientName.isNotEmpty ? clientName : tx.clientnumber));
     final noteForDisplay = tx == null
         ? const <String, dynamic>{}
-        : _purchaseNoteForDisplay(tx: tx, data: data);
+        : ensureNoteFields(
+            _purchaseNoteForDisplay(tx: tx, data: data),
+            status: tx.status,
+            client: clientLabel,
+            brand: data.brand.cleanName.isNotEmpty
+                ? data.brand.cleanName
+                : data.brand.name,
+          );
     final noteText = prettyNote(noteForDisplay);
 
     await showDialog<void>(
@@ -1430,6 +1443,11 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                 kv('Transaction ID', tx.id.toString()),
                 kv('Status', tx.status),
                 kv('Client #', tx.clientnumber),
+                kv(
+                    'Brand',
+                    data.brand.cleanName.isNotEmpty
+                        ? data.brand.cleanName
+                        : data.brand.name),
                 kv('Customer price',
                     '${_fmt(tx.customerPrice, currency)} $currency'),
               ],

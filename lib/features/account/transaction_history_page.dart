@@ -1280,7 +1280,12 @@ class _TransactionHistoryPageState
             return note;
           }
 
-          final noteForDisplay = pickNoteForDisplay(noteForUi);
+          final noteForDisplay = ensureNoteFields(
+            pickNoteForDisplay(noteForUi),
+            status: detail.status,
+            client: '${detail.client.name} (${detail.client.number})',
+            brand: detail.context.brandLabel,
+          );
           final noteText = prettyNote(noteForDisplay);
 
           TextStyle labelStyle() => const TextStyle(

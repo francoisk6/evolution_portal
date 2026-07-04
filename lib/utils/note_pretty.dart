@@ -84,6 +84,53 @@ Widget buildPrettyNoteWidget(
   );
 }
 
+/// Ensures a note map carries Status / Client / Brand entries.
+///
+/// For each field, if the note does not already contain a key referring to it
+/// (case-insensitive, synonym-aware), the provided fallback value is injected.
+/// Missing fields are prepended so they surface at the top of the Note block.
+///
+/// Non-map notes (plain strings, multi-item lists) are returned unchanged; a
+/// single-item list wrapping one map is unwrapped first (mirrors [prettyNote]).
+dynamic ensureNoteFields(
+  dynamic note, {
+  String? status,
+  String? client,
+  String? brand,
+}) {
+  var obj = note;
+  if (obj is List && obj.length == 1 && obj.first is Map) {
+    obj = obj.first;
+  }
+  if (obj is! Map) return note;
+
+  final map = Map<String, dynamic>.from(obj.cast<String, dynamic>());
+
+  bool hasKeyMatching(bool Function(String lower) test) =>
+      map.keys.any((k) => test(k.toLowerCase()));
+
+  final additions = <String, dynamic>{};
+
+  final s = (status ?? '').trim();
+  if (s.isNotEmpty && !hasKeyMatching((k) => k.contains('status'))) {
+    additions['Status'] = s;
+  }
+
+  final c = (client ?? '').trim();
+  if (c.isNotEmpty &&
+      !hasKeyMatching((k) => k.contains('client') || k.contains('customer'))) {
+    additions['Client'] = c;
+  }
+
+  final b = (brand ?? '').trim();
+  if (b.isNotEmpty && !hasKeyMatching((k) => k.contains('brand'))) {
+    additions['Brand'] = b;
+  }
+
+  if (additions.isEmpty) return note;
+  return <String, dynamic>{...additions, ...map};
+}
+
 dynamic _decodeAny(dynamic note) {
   if (note is String) {
     final s = note.trim();
