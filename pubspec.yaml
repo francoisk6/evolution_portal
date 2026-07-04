@@ -1,7 +1,7 @@
 name: evolution_portal
 publish_to: 'none'
 description: Evolution Portal
-version: 1.2.22+36
+version: 1.2.23+36
 
 environment:
   sdk: ">=3.4.0 <4.0.0"

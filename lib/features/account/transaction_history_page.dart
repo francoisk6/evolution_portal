@@ -445,6 +445,7 @@ class _TransactionHistoryPageState
         q: filters.q,
         userId: filters.userId,
         sectorId: filters.sectorId,
+        categoryId: filters.categoryId,
         productId: filters.productId,
         brandId: filters.brandId,
         brandNotNull: filters.brandNotNull,
@@ -508,6 +509,7 @@ class _TransactionHistoryPageState
         (current.status?.trim().isEmpty ?? true) ? null : current.status;
     int? userId = current.userId;
     int? sectorId = current.sectorId;
+    int? categoryId = current.categoryId;
     int? productId = current.productId;
     int? brandId = current.brandId;
     bool brandNotNull = current.brandNotNull == true;
@@ -543,6 +545,21 @@ class _TransactionHistoryPageState
       statusSet.addAll(const ['Done', 'Under process', 'Failed']);
     }
     final statusOptions = statusSet.toList()..sort();
+
+    bool categoryMatchesSector(int? selectedCategoryId, int? selectedSectorId) {
+      if (selectedCategoryId == null || selectedSectorId == null) return true;
+      TransactionFilterCategoryOption? category;
+      for (final entry
+          in available?.categories ??
+              const <TransactionFilterCategoryOption>[]) {
+        if (entry.id == selectedCategoryId) {
+          category = entry;
+          break;
+        }
+      }
+      if (category == null || category.sectorId == null) return true;
+      return category.sectorId == selectedSectorId;
+    }
 
     bool productMatchesSector(int? selectedProductId, int? selectedSectorId) {
       if (selectedProductId == null || selectedSectorId == null) return true;
@@ -584,6 +601,16 @@ class _TransactionHistoryPageState
         return false;
       }
       return true;
+    }
+
+    List<TransactionFilterCategoryOption> filteredCategories(
+        int? selectedSectorId) {
+      final all =
+          available?.categories ?? const <TransactionFilterCategoryOption>[];
+      if (selectedSectorId == null) return all;
+      return all
+          .where((e) => e.sectorId == null || e.sectorId == selectedSectorId)
+          .toList();
     }
 
     List<TransactionFilterProductOption> filteredProducts(
@@ -658,6 +685,7 @@ class _TransactionHistoryPageState
                   status = null;
                   userId = null;
                   sectorId = null;
+                  categoryId = null;
                   productId = null;
                   brandId = null;
                   brandNotNull = false;
@@ -674,6 +702,7 @@ class _TransactionHistoryPageState
                   limit: current.limit,
                   userId: userId,
                   sectorId: sectorId,
+                  categoryId: categoryId,
                   productId: productId,
                   brandId: brandId,
                   brandNotNull: brandNotNull ? true : null,
@@ -716,11 +745,14 @@ class _TransactionHistoryPageState
                 );
               }
 
+              final categoryOptions = filteredCategories(sectorId);
               final productOptions = filteredProducts(sectorId);
               final brandOptions = filteredBrands(sectorId, productId);
               final showUserFilter =
                   (available?.users.isNotEmpty ?? false) || userId != null;
               final showSectorFilter = (available?.sectors.isNotEmpty ?? false);
+              final showCategoryFilter =
+                  (available?.categories.isNotEmpty ?? false);
               final showProductFilter = productOptions.isNotEmpty;
               final showBrandFilter = brandOptions.isNotEmpty;
 
@@ -948,6 +980,12 @@ class _TransactionHistoryPageState
                                           onChanged: (v) {
                                             setModalState(() {
                                               sectorId = v;
+                                              if (!categoryMatchesSector(
+                                                categoryId,
+                                                sectorId,
+                                              )) {
+                                                categoryId = null;
+                                              }
                                               if (!productMatchesSector(
                                                 productId,
                                                 sectorId,
@@ -961,6 +999,35 @@ class _TransactionHistoryPageState
                                               )) {
                                                 brandId = null;
                                               }
+                                            });
+                                          },
+                                        ),
+                                      ],
+                                      if (showCategoryFilter ||
+                                          categoryId != null) ...[
+                                        const SizedBox(height: 8),
+                                        _SearchableDropdownField<int>(
+                                          label: 'Category',
+                                          hintText: 'All categories',
+                                          allLabel: 'All categories',
+                                          value: categoryId,
+                                          options: categoryOptions
+                                              .map(
+                                                (e) => _ComboBoxOption<int>(
+                                                  value: e.id,
+                                                  label: e.label,
+                                                ),
+                                              )
+                                              .toList(),
+                                          onChanged: (v) {
+                                            setModalState(() {
+                                              categoryId = v;
+                                              // Category narrows products/brands
+                                              // server-side; child options carry
+                                              // no category_id, so clear them and
+                                              // let the reload re-narrow.
+                                              productId = null;
+                                              brandId = null;
                                             });
                                           },
                                         ),

@@ -205,6 +205,32 @@ class TransactionFilterSectorOption {
   }
 }
 
+class TransactionFilterCategoryOption {
+  final int id;
+  final String name;
+  final String alt;
+  final String label;
+  final int? sectorId;
+
+  const TransactionFilterCategoryOption({
+    required this.id,
+    required this.name,
+    required this.alt,
+    required this.label,
+    required this.sectorId,
+  });
+
+  factory TransactionFilterCategoryOption.fromJson(Map<String, dynamic> m) {
+    return TransactionFilterCategoryOption(
+      id: _asIntOrNull(m['id']) ?? 0,
+      name: (m['name'] ?? '').toString(),
+      alt: (m['alt'] ?? '').toString(),
+      label: (m['label'] ?? m['name'] ?? m['alt'] ?? '').toString(),
+      sectorId: _asIntOrNull(m['sector_id']),
+    );
+  }
+}
+
 class TransactionFilterProductOption {
   final int id;
   final String name;
@@ -270,6 +296,7 @@ class TransactionFilterSelected {
   final String? q;
   final bool? brandNotNull;
   final int? sectorId;
+  final int? categoryId;
   final int? productId;
   final int? brandId;
 
@@ -280,6 +307,7 @@ class TransactionFilterSelected {
     this.q,
     this.brandNotNull,
     this.sectorId,
+    this.categoryId,
     this.productId,
     this.brandId,
   });
@@ -292,6 +320,7 @@ class TransactionFilterSelected {
       q: _asCleanString(m['q']),
       brandNotNull: _asBoolOrNull(m['brand_not_null']),
       sectorId: _asIntOrNull(m['sector_id'] ?? m['sector']),
+      categoryId: _asIntOrNull(m['category_id'] ?? m['category']),
       productId: _asIntOrNull(m['product_id'] ?? m['product']),
       brandId: _asIntOrNull(m['brand_id'] ?? m['brand']),
     );
@@ -301,12 +330,14 @@ class TransactionFilterSelected {
 class TransactionFilterAvailable {
   final List<TransactionFilterUserOption> users;
   final List<TransactionFilterSectorOption> sectors;
+  final List<TransactionFilterCategoryOption> categories;
   final List<TransactionFilterProductOption> products;
   final List<TransactionFilterBrandOption> brands;
 
   const TransactionFilterAvailable({
     required this.users,
     required this.sectors,
+    required this.categories,
     required this.products,
     required this.brands,
   });
@@ -314,6 +345,7 @@ class TransactionFilterAvailable {
   bool get hasAnyOptions =>
       users.isNotEmpty ||
       sectors.isNotEmpty ||
+      categories.isNotEmpty ||
       products.isNotEmpty ||
       brands.isNotEmpty;
 
@@ -324,6 +356,9 @@ class TransactionFilterAvailable {
           .toList(),
       sectors: _asMapList(m['sectors'])
           .map(TransactionFilterSectorOption.fromJson)
+          .toList(),
+      categories: _asMapList(m['categories'])
+          .map(TransactionFilterCategoryOption.fromJson)
           .toList(),
       products: _asMapList(m['products'])
           .map(TransactionFilterProductOption.fromJson)

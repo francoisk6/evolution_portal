@@ -18,6 +18,7 @@ class TransactionFilters {
   final int limit;
   final int? userId;
   final int? sectorId;
+  final int? categoryId;
   final int? productId;
   final int? brandId;
   final bool? brandNotNull;
@@ -31,6 +32,7 @@ class TransactionFilters {
     this.limit = 50,
     this.userId,
     this.sectorId,
+    this.categoryId,
     this.productId,
     this.brandId,
     this.brandNotNull,
@@ -45,6 +47,7 @@ class TransactionFilters {
     int? limit,
     Object? userId = _txUnset,
     Object? sectorId = _txUnset,
+    Object? categoryId = _txUnset,
     Object? productId = _txUnset,
     Object? brandId = _txUnset,
     Object? brandNotNull = _txUnset,
@@ -58,6 +61,7 @@ class TransactionFilters {
       limit: limit ?? this.limit,
       userId: userId is _Unset ? this.userId : userId as int?,
       sectorId: sectorId is _Unset ? this.sectorId : sectorId as int?,
+      categoryId: categoryId is _Unset ? this.categoryId : categoryId as int?,
       productId: productId is _Unset ? this.productId : productId as int?,
       brandId: brandId is _Unset ? this.brandId : brandId as int?,
       brandNotNull: brandNotNull is _Unset
@@ -76,6 +80,7 @@ class TransactionFilters {
       q: selected.q,
       userId: selected.userId,
       sectorId: selected.sectorId,
+      categoryId: selected.categoryId,
       productId: selected.productId,
       brandId: selected.brandId,
       brandNotNull: selected.brandNotNull,
@@ -183,8 +188,22 @@ class TransactionHistoryNotifier extends StateNotifier<TransactionHistoryState> 
     if (available == null) return filters;
 
     int? sectorId = filters.sectorId;
+    int? categoryId = filters.categoryId;
     int? productId = filters.productId;
     int? brandId = filters.brandId;
+
+    bool categoryMatchesSector(int? selectedCategoryId, int? selectedSectorId) {
+      if (selectedCategoryId == null || selectedSectorId == null) return true;
+      TransactionFilterCategoryOption? category;
+      for (final entry in available.categories) {
+        if (entry.id == selectedCategoryId) {
+          category = entry;
+          break;
+        }
+      }
+      if (category == null || category.sectorId == null) return true;
+      return category.sectorId == selectedSectorId;
+    }
 
     bool productMatchesSector(int? selectedProductId, int? selectedSectorId) {
       if (selectedProductId == null || selectedSectorId == null) return true;
@@ -226,6 +245,9 @@ class TransactionHistoryNotifier extends StateNotifier<TransactionHistoryState> 
       return true;
     }
 
+    if (!categoryMatchesSector(categoryId, sectorId)) {
+      categoryId = null;
+    }
     if (!productMatchesSector(productId, sectorId)) {
       productId = null;
     }
@@ -233,7 +255,11 @@ class TransactionHistoryNotifier extends StateNotifier<TransactionHistoryState> 
       brandId = null;
     }
 
-    return filters.copyWith(productId: productId, brandId: brandId);
+    return filters.copyWith(
+      categoryId: categoryId,
+      productId: productId,
+      brandId: brandId,
+    );
   }
 
   List<TransactionListItem> _mergeItems(
@@ -284,6 +310,7 @@ class TransactionHistoryNotifier extends StateNotifier<TransactionHistoryState> 
         q: (state.filters.q?.trim().isEmpty ?? true) ? null : state.filters.q,
         userId: state.filters.userId,
         sectorId: state.filters.sectorId,
+        categoryId: state.filters.categoryId,
         productId: state.filters.productId,
         brandId: state.filters.brandId,
         brandNotNull: state.filters.brandNotNull,
