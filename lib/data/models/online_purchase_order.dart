@@ -2,6 +2,7 @@ class OnlinePurchaseBrand {
   final int id;
   final String name;
   final String cleanName;
+  final String nameAlt;
   final String code;
   final String sector;
   final String product;
@@ -14,6 +15,7 @@ class OnlinePurchaseBrand {
     required this.id,
     required this.name,
     required this.cleanName,
+    required this.nameAlt,
     required this.code,
     required this.sector,
     required this.product,
@@ -28,6 +30,7 @@ class OnlinePurchaseBrand {
       id: j['id'] is int ? j['id'] as int : int.tryParse('${j['id']}') ?? 0,
       name: (j['name'] ?? '').toString(),
       cleanName: (j['clean_name'] ?? '').toString(),
+      nameAlt: (j['name_alt'] ?? '').toString(),
       code: (j['code'] ?? '').toString(),
       sector: (j['sector'] ?? '').toString(),
       product: (j['product'] ?? '').toString(),

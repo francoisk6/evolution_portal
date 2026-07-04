@@ -1120,6 +1120,13 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
   Future<void> _submit({bool goHomeAfterSuccess = false}) async {
     if (_posting) return;
 
+    // Superusers and staff may browse brands/prices but must not purchase.
+    if (ref.read(sessionProvider).isAdmin) {
+      _snack('Superusers and staff cannot perform brand purchases.',
+          error: true);
+      return;
+    }
+
     final data = _order;
     final sel = ref.read(onlineBrandSelectionProvider);
     if (data == null || sel == null) return;
@@ -1812,6 +1819,22 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
 
   // ───────────────────── build ─────────────────────
 
+  /// Brand label shown on the purchase page.
+  ///
+  /// Normal users see the clean brand name. Superusers see the alternate name
+  /// (`name_alt`), which carries the internal "*xx" marker stripped from the
+  /// clean name. Falls back to the clean name when `name_alt` is empty.
+  String _brandLabel(OnlinePurchaseOrderData data) {
+    final clean = data.brand.cleanName.isNotEmpty
+        ? data.brand.cleanName
+        : data.brand.name;
+
+    if (!ref.read(sessionProvider).isSuperuser) return clean;
+
+    final alt = data.brand.nameAlt.trim();
+    return alt.isNotEmpty ? alt : clean;
+  }
+
   @override
   Widget build(BuildContext context) {
     // Riverpod: ref.listen must be inside build (not initState).
@@ -1844,7 +1867,10 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
 
     final data = _order;
 
-    final nextEnabled = !_posting && !_loading && _order != null;
+    // Superusers and staff may browse brands/prices but cannot purchase.
+    final purchaseDenied = ref.watch(sessionProvider).isAdmin;
+    final nextEnabled =
+        !_posting && !_loading && _order != null && !purchaseDenied;
 
     // Prefer returning to the exact previous location (brands tab + query params)
     // rather than a hard-coded route that may require path params.
@@ -1879,14 +1905,24 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Text(
-                              data.brand.cleanName.isNotEmpty
-                                  ? data.brand.cleanName
-                                  : data.brand.name,
+                              _brandLabel(data),
                               style: const TextStyle(
                                 fontSize: _fsHeader,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
+                            if (purchaseDenied) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                'View only — superusers and staff cannot '
+                                'perform brand purchases.',
+                                style: TextStyle(
+                                  fontSize: _fsLabel,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.orange.shade800,
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 10),
                             _accountDetailsBlock(data),
                             const SizedBox(height: 10),
