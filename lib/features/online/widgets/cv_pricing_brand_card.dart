@@ -131,6 +131,51 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
     return s.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
+  /// Find the per-option expiry info (NEW/live format only) for a catalog
+  /// option. Matches on `option_name` first, then falls back to a normalized
+  /// name/label match. Returns null for the OLD/cached format (no
+  /// `master_options`) or a never-subscribed option.
+  CvOptionInfo? _masterOptionFor(Map raw) {
+    final info = _lookupInfo;
+    if (info == null || info.masterOptions.isEmpty) return null;
+
+    final rawKey =
+        (raw['option_name'] ?? raw['option_key'] ?? raw['key'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+    if (rawKey.isNotEmpty) {
+      for (final o in info.masterOptions) {
+        if (o.optionName.trim().toLowerCase() == rawKey) return o;
+      }
+    }
+
+    final rawLabel =
+        _norm((raw['option_label'] ?? raw['option_name'] ?? '').toString());
+    if (rawLabel.isNotEmpty) {
+      for (final o in info.masterOptions) {
+        if (_norm(o.name) == rawLabel || _norm(o.optionName) == rawLabel) {
+          return o;
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Small trailing widget showing an option's own expiry date. Green =
+  /// active, red + strikethrough = lapsed.
+  Widget _expiryLabel(CvOptionInfo o, double fontSize) {
+    return Text(
+      o.expiryDate,
+      style: TextStyle(
+        fontSize: fontSize,
+        color: o.active ? Colors.green.shade700 : Colors.red.shade700,
+        decoration:
+            o.active ? TextDecoration.none : TextDecoration.lineThrough,
+      ),
+    );
+  }
+
   void _applyAccountTypeSelections(String masterAccountType) {
     final parts = masterAccountType
         .split('|')
@@ -938,6 +983,10 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
                 fontSize: fsBase,
               );
 
+              // Per-option expiry (NEW/live format only). Null for the
+              // OLD/cached format or a never-subscribed option ⇒ nothing extra.
+              final optInfo = _masterOptionFor(raw);
+
               // Use the same on/off control style as the Login page "Remember" switch.
               // This keeps the CV pricing option toggles visually consistent across the app.
               return Padding(
@@ -961,6 +1010,10 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
                         style: style,
                       ),
                     ),
+                    if (optInfo != null && optInfo.expiryDate.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      _expiryLabel(optInfo, fsLabel),
+                    ],
                   ],
                 ),
               );
@@ -998,29 +1051,68 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
             if (_slaveCount > 0) ...[
               const SizedBox(height: 10),
               ...List.generate(_slaveCount, (i) {
+                // Slave fields are autofilled from _lookupInfo.slaves[i] in the
+                // same order, so index maps 1:1. Per-option expiry exists in the
+                // NEW/live format only; OLD/cached ⇒ empty ⇒ nothing extra.
+                final slaveInfo =
+                    (_lookupInfo != null && i < _lookupInfo!.slaves.length)
+                        ? _lookupInfo!.slaves[i]
+                        : null;
+                final slaveOpts = slaveInfo?.options ?? const <CvOptionInfo>[];
+
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: TextField(
-                    controller: _slaveSerials[i],
-                    keyboardType: TextInputType.text,
-                    textInputAction: TextInputAction.next,
-                    onChanged: (_) {
-                      setState(() {});
-                      _emitStateChanged();
-                    },
-                    style: const TextStyle(fontSize: fsBase),
-                    decoration: InputDecoration(
-                      labelText: 'Slave Serial #${i + 1}',
-                      hintText: 'required',
-                      labelStyle: const TextStyle(fontSize: fsLabel),
-                      hintStyle: const TextStyle(fontSize: fsLabel),
-                      isDense: true,
-                      border: border,
-                      filled: true,
-                      fillColor: reqFill(_slaveSerials[i].text.trim().isNotEmpty),
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        controller: _slaveSerials[i],
+                        keyboardType: TextInputType.text,
+                        textInputAction: TextInputAction.next,
+                        onChanged: (_) {
+                          setState(() {});
+                          _emitStateChanged();
+                        },
+                        style: const TextStyle(fontSize: fsBase),
+                        decoration: InputDecoration(
+                          labelText: 'Slave Serial #${i + 1}',
+                          hintText: 'required',
+                          labelStyle: const TextStyle(fontSize: fsLabel),
+                          hintStyle: const TextStyle(fontSize: fsLabel),
+                          isDense: true,
+                          border: border,
+                          filled: true,
+                          fillColor:
+                              reqFill(_slaveSerials[i].text.trim().isNotEmpty),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                        ),
+                      ),
+                      if (slaveOpts.isNotEmpty)
+                        ...slaveOpts
+                            .where((o) => o.expiryDate.isNotEmpty)
+                            .map(
+                              (o) => Padding(
+                                padding:
+                                    const EdgeInsets.only(left: 4, top: 4),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        o.name,
+                                        style: TextStyle(
+                                          fontSize: fsLabel,
+                                          color: Colors.grey.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _expiryLabel(o, fsLabel),
+                                  ],
+                                ),
+                              ),
+                            ),
+                    ],
                   ),
                 );
               }),
@@ -1042,7 +1134,11 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
               ],
             ),
 
-            if ((_lookupInfo?.masterExpiryDate.trim() ?? '').isNotEmpty) ...[
+            // Keep the single "Old Expiry Date" line for the OLD/cached format
+            // (no per-option data). When per-option lines are shown above, they
+            // supersede it.
+            if ((_lookupInfo?.masterOptions.isEmpty ?? true) &&
+                (_lookupInfo?.masterExpiryDate.trim() ?? '').isNotEmpty) ...[
               const SizedBox(height: 6),
               Row(
                 children: [
