@@ -942,7 +942,7 @@ class _ProfileLeftColumn extends StatelessWidget {
         const SizedBox(height: 10),
 
         DropdownButtonFormField<String>(
-          value: (selectedCurrencyCode == null || selectedCurrencyCode!.isEmpty)
+          initialValue: (selectedCurrencyCode == null || selectedCurrencyCode!.isEmpty)
               ? (currencies.isNotEmpty ? currencies.first.code : null)
               : selectedCurrencyCode,
           items: currencies
@@ -1004,7 +1004,7 @@ class _ProfileRightColumn extends StatelessWidget {
         const SizedBox(height: 10),
 
         DropdownButtonFormField<int>(
-          value: (uiVersion == 1 || uiVersion == 2) ? uiVersion : 2,
+          initialValue: (uiVersion == 1 || uiVersion == 2) ? uiVersion : 2,
           items: const [
             DropdownMenuItem(value: 1, child: Text('1')),
             DropdownMenuItem(value: 2, child: Text('2')),

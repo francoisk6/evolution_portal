@@ -926,7 +926,7 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
                 final f3 = SizedBox(
                   width: isNarrow ? double.infinity : 220,
                   child: DropdownButtonFormField<int>(
-                    value: _days,
+                    initialValue: _days,
                     items: items
                         .map((d) => DropdownMenuItem<int>(
                               value: d,
