@@ -135,9 +135,11 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
   /// option. Matches on `option_name` first, then falls back to a normalized
   /// name/label match. Returns null for the OLD/cached format (no
   /// `master_options`) or a never-subscribed option.
-  CvOptionInfo? _masterOptionFor(Map raw) {
-    final info = _lookupInfo;
-    if (info == null || info.masterOptions.isEmpty) return null;
+  CvOptionInfo? _masterOptionFor(Map raw, {List<CvOptionInfo>? options}) {
+    // `options` lets callers pass a freshly-fetched list before `_lookupInfo`
+    // has been assigned (see _lookupReceiverInfo).
+    final opts = options ?? _lookupInfo?.masterOptions ?? const <CvOptionInfo>[];
+    if (opts.isEmpty) return null;
 
     final rawKey =
         (raw['option_name'] ?? raw['option_key'] ?? raw['key'] ?? '')
@@ -145,7 +147,7 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
             .trim()
             .toLowerCase();
     if (rawKey.isNotEmpty) {
-      for (final o in info.masterOptions) {
+      for (final o in opts) {
         if (o.optionName.trim().toLowerCase() == rawKey) return o;
       }
     }
@@ -153,7 +155,7 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
     final rawLabel =
         _norm((raw['option_label'] ?? raw['option_name'] ?? '').toString());
     if (rawLabel.isNotEmpty) {
-      for (final o in info.masterOptions) {
+      for (final o in opts) {
         if (_norm(o.name) == rawLabel || _norm(o.optionName) == rawLabel) {
           return o;
         }
@@ -162,21 +164,22 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
     return null;
   }
 
-  /// Small trailing widget showing an option's own expiry date. Green =
-  /// active, red + strikethrough = lapsed.
+  /// Small trailing widget showing an option's own expiry date.
+  /// Green = active, red = lapsed (no strikethrough).
   Widget _expiryLabel(CvOptionInfo o, double fontSize) {
     return Text(
       o.expiryDate,
       style: TextStyle(
         fontSize: fontSize,
         color: o.active ? Colors.green.shade700 : Colors.red.shade700,
-        decoration:
-            o.active ? TextDecoration.none : TextDecoration.lineThrough,
       ),
     );
   }
 
-  void _applyAccountTypeSelections(String masterAccountType) {
+  void _applyAccountTypeSelections(
+    String masterAccountType, {
+    List<CvOptionInfo> options = const [],
+  }) {
     final parts = masterAccountType
         .split('|')
         .map((e) => _norm(e))
@@ -203,6 +206,15 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
           hit = true;
           break;
         }
+      }
+
+      // A lapsed (active == false) option must stay OFF even though the
+      // account_type string still lists it. Only the NEW/live format carries
+      // per-option `active`; with no per-option data we keep the old behavior.
+      final info = _masterOptionFor(raw, options: options);
+      if (info != null && !info.active) {
+        _selected[id] = false;
+        continue;
       }
 
       _selected[id] = hit;
@@ -393,7 +405,9 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
         // Auto-check options based on the returned master account type.
         final acct = d.masterAccountType.trim();
         if (acct.isNotEmpty) {
-          _applyAccountTypeSelections(acct);
+          // Pass d.masterOptions explicitly: _lookupInfo is only assigned in the
+          // setState below, so per-option `active` isn't reachable yet.
+          _applyAccountTypeSelections(acct, options: d.masterOptions);
         }
 
         // Auto-fill slaves (slave_1..slave_N) up to maxSlaves.
@@ -472,6 +486,28 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
     return false;
   }
 
+  bool _isEvent(Map o) => o['one_time_event'] == true;
+
+  // Any SELECTED option that is NOT a one-time event.
+  bool _hasNonEventSelected() {
+    for (final raw in widget.cvPricing) {
+      if (raw is! Map) continue;
+      if (_isEvent(raw)) continue;
+      final id = _asInt(raw['id']);
+      if (id != null && (_selected[id] ?? false)) return true;
+    }
+    return false;
+  }
+
+  bool _anySelected() {
+    for (final raw in widget.cvPricing) {
+      if (raw is! Map) continue;
+      final id = _asInt(raw['id']);
+      if (id != null && (_selected[id] ?? false)) return true;
+    }
+    return false;
+  }
+
   int? _asInt(dynamic v) {
     if (v == null) return null;
     if (v is int) return v;
@@ -504,8 +540,9 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
   }
 
   double _nonSlaveTotalUsd(int quantityDays) {
-    if (quantityDays <= 0) return 0;
-
+    // NOTE: no early return on quantityDays <= 0 — one-time events are flat and
+    // must still be billed when days is 0 (events-only order). Non-event options
+    // resolve to 0 via _effectiveNonSlaveDaysForOption when quantityDays <= 0.
     double sum = 0;
     for (final raw in widget.cvPricing) {
       if (raw is! Map) continue;
@@ -515,6 +552,11 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
 
       final perDay = _asDouble(raw['customer_price_day']) ?? 0;
       if (perDay <= 0) continue;
+
+      if (_isEvent(raw)) {
+        sum += perDay; // FLAT, once — ignore days
+        continue;
+      }
 
       final billedDays = _effectiveNonSlaveDaysForOption(raw, quantityDays);
       if (billedDays <= 0) continue;
@@ -545,8 +587,12 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
 
   double _totalUsd() {
     final masterOk = _masterCtl.text.trim().isNotEmpty;
-    if (!masterOk || _days == null) return 0;
-    final d = _days ?? 0;
+    if (!masterOk) return 0;
+    final needDays = _hasNonEventSelected();
+    if (needDays && _days == null) return 0;
+    // events-only: force d=0 (events are flat; slaves must not be billed even if
+    // _days holds a stale value from a prior subscription selection).
+    final d = needDays ? (_days ?? 0) : 0;
     return _nonSlaveTotalUsd(d) + _slaveTotalUsd(d);
   }
 
@@ -559,6 +605,8 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
   }
 
   bool _allMandatoryOptionsSelected() {
+    // Events-only (or nothing selected) => mandatory options are not required.
+    if (!_hasNonEventSelected()) return true;
     for (final raw in widget.cvPricing) {
       if (raw is! Map) continue;
       if (!_isMandatory(raw)) continue;
@@ -580,7 +628,8 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
 
   bool _isValidNow() {
     if (_masterCtl.text.trim().isEmpty) return false;
-    if (_days == null) return false;
+    if (!_anySelected()) return false;
+    if (_hasNonEventSelected() && _days == null) return false;
     if (!_allMandatoryOptionsSelected()) return false;
     if (!_slavesValid()) return false;
     if (_totalUsd() <= 0) return false;
@@ -695,7 +744,11 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
 
   String _firstMissingReason() {
     if (_masterCtl.text.trim().isEmpty) return 'Master serial number is required.';
-    if (_days == null) return 'Duration is required.';
+    if (!_anySelected()) return 'Please select at least one option.';
+    if (_hasNonEventSelected() && _days == null) return 'Duration is required.';
+    if (!_allMandatoryOptionsSelected()) {
+      return 'Mandatory options are required.';
+    }
     if (!_slavesValid()) return 'Please fill all slave serial numbers.';
     if (_totalUsd() <= 0) return 'Selling price must be greater than 0.';
     return 'Missing required fields.';
@@ -704,7 +757,9 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
   Map<String, dynamic> _buildDraft(double totalUsd) {
     final receiver = _effectiveReceiverNumber();
     final master = _masterCtl.text.trim();
-    final days = _days;
+    // Events-only orders carry no days: the backend treats events as flat
+    // regardless, but sending 0 is the clean contract.
+    final days = _hasNonEventSelected() ? _days : 0;
     final selectedIds = _selectedOptionIds();
     final optMeta = _selectedOptionMeta(selectedIds);
     final slaveSerials = _slaveSerials
@@ -879,6 +934,10 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
               builder: (context, c) {
                 final isNarrow = c.maxWidth < 720;
 
+                // Duration only applies when a non-event option is selected.
+                // Events-only (or nothing selected) hides the Days selector.
+                final showDuration = _hasNonEventSelected();
+
                 final f1 = SizedBox(
                   width: isNarrow ? double.infinity : 320,
                   child: TextField(
@@ -960,7 +1019,7 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
                 return Wrap(
                   spacing: 14,
                   runSpacing: 12,
-                  children: [f1, f2, f3],
+                  children: [f1, f2, if (showDuration) f3],
                 );
               },
             ),
@@ -994,14 +1053,16 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
                 child: Row(
                   children: [
                     Switch(
+                      // Mandatory options default-checked (via
+                      // _applyAccountTypeSelections) but remain toggleable, so an
+                      // events-only purchase isn't blocked. Validation enforces
+                      // that mandatory is on whenever a non-event is selected.
                       value: _selected[id] ?? false,
-                      onChanged: mandatory
-                          ? null
-                          : (v) {
-                              setState(() => _selected[id] = v);
-                              _emitValid(force: true);
-                              _emitStateChanged();
-                            },
+                      onChanged: (v) {
+                        setState(() => _selected[id] = v);
+                        _emitValid(force: true);
+                        _emitStateChanged();
+                      },
                     ),
                     const SizedBox(width: 6),
                     Expanded(
