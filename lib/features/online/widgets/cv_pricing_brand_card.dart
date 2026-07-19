@@ -192,6 +192,13 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
       final id = _asInt(raw['id']);
       if (id == null) continue;
 
+      // One-time events are never pre-selected, even when the customer owns an
+      // unexpired one -- purchasing an event must always be a deliberate action.
+      if (_isEvent(raw)) {
+        _selected[id] = false;
+        continue;
+      }
+
       final mandatory = _isMandatory(raw);
       if (mandatory) {
         _selected[id] = true;
