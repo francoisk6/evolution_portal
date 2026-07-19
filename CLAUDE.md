@@ -19,6 +19,10 @@ Examples:
   refactor(widgets): extract PlanCard into shared/
   chore: bump flutter version
 
+### Golden rule ⚠️
+NEVER add a `Co-Authored-By:` trailer to a commit message. No exceptions.
+This applies to every commit, including ones authored by Claude.
+
 ## Code Response Format
 Every code change must be labeled:
 - `[PATCH]` — partial edit to an existing file
