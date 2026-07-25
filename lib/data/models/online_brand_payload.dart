@@ -148,6 +148,10 @@ class OnlineBrand {
 
   final OnlineCardTheme? cardTheme;
 
+  // Set by the server on active.alternates entries: the id of the displayed
+  // brand this one substitutes. Null on normal displayed brands.
+  final int? twinOf;
+
   const OnlineBrand({
     required this.id,
     required this.name,
@@ -173,6 +177,7 @@ class OnlineBrand {
     required this.isPrepaid,
     required this.sortNumber,
     required this.cardTheme,
+    this.twinOf,
   });
 
   factory OnlineBrand.fromJson(Map<String, dynamic> j) {
@@ -218,6 +223,11 @@ class OnlineBrand {
           ? j['sort_number'] as int
           : int.tryParse('${j['sort_number']}') ?? 9999,
       cardTheme: theme,
+      twinOf: j['twin_of'] == null
+          ? null
+          : (j['twin_of'] is int
+              ? j['twin_of'] as int
+              : int.tryParse('${j['twin_of']}')),
     );
   }
 }

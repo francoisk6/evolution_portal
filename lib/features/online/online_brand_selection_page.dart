@@ -673,22 +673,30 @@ class _OnlineBrandSelectionPageState
                           base = payload.active.brands;
                         } else {
                           final allowSet = allowed.toSet();
-                          // Displayed (cheapest) brands the account is allowed to buy.
-                          final result = payload.active.brands
-                              .where((b) => allowSet.contains(b.id))
-                              .toList();
-                          // For a plan whose displayed brand is NOT allowed (e.g. an account flagged
-                          // to bypass the bot), substitute the allowed alternate twin — e.g. the
-                          // Moonet card at its own price. Key by plan name (text before '*',
-                          // lowercased) — the same key the server dedup uses — so a plan never shows
-                          // twice.
-                          String planKey(OnlineBrand b) =>
-                              b.name.split('*').first.trim().toLowerCase();
-                          final shownKeys = result.map(planKey).toSet();
+                          // Group alternates by the displayed brand they substitute (server twin_of).
+                          final altByTwin = <int, List<OnlineBrand>>{};
                           for (final a in payload.active.alternates) {
-                            if (allowSet.contains(a.id) &&
-                                shownKeys.add(planKey(a))) {
-                              result.add(a);
+                            final tw = a.twinOf;
+                            if (tw != null) {
+                              (altByTwin[tw] ??= <OnlineBrand>[]).add(a);
+                            }
+                          }
+                          // Walk the API-sorted displayed list; keep each allowed brand, else
+                          // substitute its allowed twin into the SAME slot (e.g. the Moonet card for
+                          // a flagged account). Order stays exactly the server order — no client sort
+                          // or name matching.
+                          final result = <OnlineBrand>[];
+                          for (final b in payload.active.brands) {
+                            if (allowSet.contains(b.id)) {
+                              result.add(b);
+                            } else {
+                              for (final t
+                                  in (altByTwin[b.id] ?? const <OnlineBrand>[])) {
+                                if (allowSet.contains(t.id)) {
+                                  result.add(t);
+                                  break;
+                                }
+                              }
                             }
                           }
                           base = result;
