@@ -225,6 +225,7 @@ class OnlineBrand {
 class OnlineBrandsActiveBlock {
   final int subdetailId;
   final List<OnlineBrand> brands;
+  final List<OnlineBrand> alternates;
   final List<dynamic> cvPricing;
   final int maxSlaves;
   final String slaveCustomerPriceDay;
@@ -232,6 +233,7 @@ class OnlineBrandsActiveBlock {
   OnlineBrandsActiveBlock({
     required this.subdetailId,
     required this.brands,
+    this.alternates = const [],
     required this.cvPricing,
     required this.maxSlaves,
     required this.slaveCustomerPriceDay,
@@ -243,6 +245,10 @@ class OnlineBrandsActiveBlock {
             ? j['subdetail_id'] as int
             : int.tryParse('${j['subdetail_id']}') ?? 0,
         brands: (j['brands'] as List? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(OnlineBrand.fromJson)
+            .toList(),
+        alternates: (j['alternates'] as List? ?? const [])
             .whereType<Map<String, dynamic>>()
             .map(OnlineBrand.fromJson)
             .toList(),

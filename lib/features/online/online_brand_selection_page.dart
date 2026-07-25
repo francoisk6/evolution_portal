@@ -673,9 +673,25 @@ class _OnlineBrandSelectionPageState
                           base = payload.active.brands;
                         } else {
                           final allowSet = allowed.toSet();
-                          base = payload.active.brands
+                          // Displayed (cheapest) brands the account is allowed to buy.
+                          final result = payload.active.brands
                               .where((b) => allowSet.contains(b.id))
-                              .toList(growable: false);
+                              .toList();
+                          // For a plan whose displayed brand is NOT allowed (e.g. an account flagged
+                          // to bypass the bot), substitute the allowed alternate twin — e.g. the
+                          // Moonet card at its own price. Key by plan name (text before '*',
+                          // lowercased) — the same key the server dedup uses — so a plan never shows
+                          // twice.
+                          String planKey(OnlineBrand b) =>
+                              b.name.split('*').first.trim().toLowerCase();
+                          final shownKeys = result.map(planKey).toSet();
+                          for (final a in payload.active.alternates) {
+                            if (allowSet.contains(a.id) &&
+                                shownKeys.add(planKey(a))) {
+                              result.add(a);
+                            }
+                          }
+                          base = result;
                         }
 
                         searchPoolCount = base.length;
