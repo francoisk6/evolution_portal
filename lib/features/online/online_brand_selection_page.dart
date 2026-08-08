@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -1298,41 +1301,260 @@ class _TabsRow extends StatelessWidget {
     required this.onTap,
   });
 
+  /// Vertical gap between the two tab lines when the tabs are split.
+  static const double _lineGap = 6;
+
+  /// Empty band kept under the tabs when they scroll, so the app-wide
+  /// horizontal scrollbar paints below the chips instead of over them.
+  static const double _scrollbarGutter = 12;
+
   @override
   Widget build(BuildContext context) {
     if (tabs.isEmpty) return const SizedBox.shrink();
 
-    return Align(
-      alignment: Alignment.center,
-      child: SingleChildScrollView(
-        controller: controller,
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final t in tabs)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: ChoiceChip(
-                  label: Text(t.displayName.toUpperCase()),
-                  selected: t.id == activeId,
-                  selectedColor: const Color(0xFFB3261E),
-                  labelStyle: TextStyle(
-                    fontSize: 11, // NEW: smaller tab text
-                    fontWeight: FontWeight.w800,
-                    color: (t.id == activeId)
-                        ? Colors.white
-                        : const Color(0xFFB3261E),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          controller: controller,
+          scrollDirection: Axis.horizontal,
+          child: _TabsFlow(
+            targetWidth: constraints.maxWidth,
+            lineGap: _lineGap,
+            scrollbarGutter: _scrollbarGutter,
+            children: [
+              for (final t in tabs)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: ChoiceChip(
+                    label: Text(t.displayName.toUpperCase()),
+                    selected: t.id == activeId,
+                    selectedColor: const Color(0xFFB3261E),
+                    labelStyle: TextStyle(
+                      fontSize: 11, // NEW: smaller tab text
+                      fontWeight: FontWeight.w800,
+                      color: (t.id == activeId)
+                          ? Colors.white
+                          : const Color(0xFFB3261E),
+                    ),
+                    backgroundColor: Colors.white,
+                    side: const BorderSide(color: Color(0xFFB3261E)),
+                    onSelected: (_) => onTap(t.id),
                   ),
-                  backgroundColor: Colors.white,
-                  side: const BorderSide(color: Color(0xFFB3261E)),
-                  onSelected: (_) => onTap(t.id),
                 ),
-              ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
+  }
+}
+
+/// Lays the tab chips out on one line when they fit in [targetWidth],
+/// otherwise on two balanced lines. When even two lines are too wide the
+/// content keeps its measured width (the parent scroll view takes over) and a
+/// [scrollbarGutter] band is reserved underneath for the scrollbar.
+class _TabsFlow extends MultiChildRenderObjectWidget {
+  final double targetWidth;
+  final double lineGap;
+  final double scrollbarGutter;
+
+  const _TabsFlow({
+    required this.targetWidth,
+    required this.lineGap,
+    required this.scrollbarGutter,
+    required super.children,
+  });
+
+  @override
+  _RenderTabsFlow createRenderObject(BuildContext context) {
+    return _RenderTabsFlow(
+      targetWidth: targetWidth,
+      lineGap: lineGap,
+      scrollbarGutter: scrollbarGutter,
+    );
+  }
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderTabsFlow renderObject) {
+    renderObject
+      ..targetWidth = targetWidth
+      ..lineGap = lineGap
+      ..scrollbarGutter = scrollbarGutter;
+  }
+}
+
+class _TabsFlowParentData extends ContainerBoxParentData<RenderBox> {}
+
+/// Result of packing the chips into one or two lines.
+class _TabsFlowLayout {
+  final Size size;
+
+  /// Index of the first chip on the second line; equal to the child count
+  /// when everything fits on a single line.
+  final int splitAt;
+  final double lineHeight;
+  final double firstLineWidth;
+  final double secondLineWidth;
+
+  const _TabsFlowLayout({
+    required this.size,
+    required this.splitAt,
+    required this.lineHeight,
+    required this.firstLineWidth,
+    required this.secondLineWidth,
+  });
+}
+
+class _RenderTabsFlow extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, _TabsFlowParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, _TabsFlowParentData> {
+  _RenderTabsFlow({
+    required double targetWidth,
+    required double lineGap,
+    required double scrollbarGutter,
+  })  : _targetWidth = targetWidth,
+        _lineGap = lineGap,
+        _scrollbarGutter = scrollbarGutter;
+
+  static const double _epsilon = 0.5;
+
+  double _targetWidth;
+  double get targetWidth => _targetWidth;
+  set targetWidth(double value) {
+    if (_targetWidth == value) return;
+    _targetWidth = value;
+    markNeedsLayout();
+  }
+
+  double _lineGap;
+  double get lineGap => _lineGap;
+  set lineGap(double value) {
+    if (_lineGap == value) return;
+    _lineGap = value;
+    markNeedsLayout();
+  }
+
+  double _scrollbarGutter;
+  double get scrollbarGutter => _scrollbarGutter;
+  set scrollbarGutter(double value) {
+    if (_scrollbarGutter == value) return;
+    _scrollbarGutter = value;
+    markNeedsLayout();
+  }
+
+  @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! _TabsFlowParentData) {
+      child.parentData = _TabsFlowParentData();
+    }
+  }
+
+  /// Measures the chips and decides on one vs. two lines.
+  ///
+  /// When [dry] is true the children are only measured, never positioned.
+  _TabsFlowLayout _computeLayout(BoxConstraints constraints, {required bool dry}) {
+    final widths = <double>[];
+    double lineHeight = 0;
+
+    RenderBox? child = firstChild;
+    while (child != null) {
+      final Size childSize;
+      if (dry) {
+        childSize = child.getDryLayout(const BoxConstraints());
+      } else {
+        child.layout(const BoxConstraints(), parentUsesSize: true);
+        childSize = child.size;
+      }
+      widths.add(childSize.width);
+      lineHeight = math.max(lineHeight, childSize.height);
+      child = (child.parentData! as _TabsFlowParentData).nextSibling;
+    }
+
+    final total = widths.fold<double>(0, (sum, w) => sum + w);
+    final target = _targetWidth.isFinite ? _targetWidth : total;
+
+    // Single line whenever everything fits; otherwise split into the two
+    // lines that minimise the widest line.
+    var splitAt = widths.length;
+    if (total > target + _epsilon && widths.length > 1) {
+      var best = double.infinity;
+      var running = 0.0;
+      for (var i = 1; i < widths.length; i++) {
+        running += widths[i - 1];
+        final widest = math.max(running, total - running);
+        if (widest < best) {
+          best = widest;
+          splitAt = i;
+        }
+      }
+    }
+
+    final singleLine = splitAt == widths.length;
+    final firstLineWidth =
+        widths.take(splitAt).fold<double>(0, (sum, w) => sum + w);
+    final secondLineWidth = singleLine ? 0.0 : total - firstLineWidth;
+
+    final contentWidth = math.max(firstLineWidth, secondLineWidth);
+    final scrolls = contentWidth > target + _epsilon;
+
+    final linesHeight =
+        singleLine ? lineHeight : lineHeight * 2 + _lineGap;
+
+    return _TabsFlowLayout(
+      size: constraints.constrain(Size(
+        math.max(target, contentWidth),
+        linesHeight + (scrolls ? _scrollbarGutter : 0),
+      )),
+      splitAt: splitAt,
+      lineHeight: lineHeight,
+      firstLineWidth: firstLineWidth,
+      secondLineWidth: secondLineWidth,
+    );
+  }
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) {
+    if (childCount == 0) return constraints.smallest;
+    return _computeLayout(constraints, dry: true).size;
+  }
+
+  @override
+  void performLayout() {
+    if (childCount == 0) {
+      size = constraints.smallest;
+      return;
+    }
+
+    final layout = _computeLayout(constraints, dry: false);
+    size = layout.size;
+
+    var dx = (size.width - layout.firstLineWidth) / 2;
+    var dy = 0.0;
+    var index = 0;
+
+    RenderBox? child = firstChild;
+    while (child != null) {
+      if (index == layout.splitAt) {
+        dx = (size.width - layout.secondLineWidth) / 2;
+        dy = layout.lineHeight + _lineGap;
+      }
+      final data = child.parentData! as _TabsFlowParentData;
+      data.offset = Offset(dx, dy + (layout.lineHeight - child.size.height) / 2);
+      dx += child.size.width;
+      index++;
+      child = data.nextSibling;
+    }
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    defaultPaint(context, offset);
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    return defaultHitTestChildren(result, position: position);
   }
 }
 
