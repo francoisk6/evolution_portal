@@ -1860,38 +1860,50 @@ class ApiService {
     required String method,
     bool auth = false,
     Map<String, dynamic>? body,
+    Duration? timeout,
   }) async {
     if (auth) await _ensureTokenLoaded();
 
-    late final http.Response res;
+    late final Future<http.Response> pending;
     switch (method.toUpperCase()) {
       case 'POST':
-        res = await http.post(
+        pending = http.post(
           url,
           headers: _jsonHeaders(auth: auth),
           body: body == null ? null : jsonEncode(body),
         );
         break;
       case 'PATCH':
-        res = await http.patch(
+        pending = http.patch(
           url,
           headers: _jsonHeaders(auth: auth),
           body: body == null ? null : jsonEncode(body),
         );
         break;
       case 'DELETE':
-        res = await http.delete(
+        pending = http.delete(
           url,
           headers: _jsonHeaders(auth: auth),
           body: body == null ? null : jsonEncode(body),
         );
         break;
       case 'GET':
-        res = await http.get(url, headers: _jsonHeaders(auth: auth));
+        pending = http.get(url, headers: _jsonHeaders(auth: auth));
         break;
       default:
         throw Exception('Unsupported method: $method');
     }
+
+    // `package:http` has no deadline of its own — without this a stalled
+    // long-running job would keep the caller waiting forever.
+    final http.Response res = timeout == null
+        ? await pending
+        : await pending.timeout(
+            timeout,
+            onTimeout: () => throw Exception(
+              'Request timed out after ${timeout.inSeconds}s.',
+            ),
+          );
 
     final text = _bodyText(res);
     Map<String, dynamic> parsed = const <String, dynamic>{};
@@ -1969,6 +1981,19 @@ class ApiService {
         'dry_run': dryRun,
       },
     );
+  }
+
+  // ───────────────── ONLINE / CATALOG UPDATES ─────────────────
+
+  /// Triggers one brand catalog-update job.
+  ///
+  /// [key] is the URL segment (e.g. `g2g`, `online_cards`, `cablevision`).
+  Future<Map<String, dynamic>> runCatalogUpdate({
+    required String key,
+    required Duration timeout,
+  }) {
+    final url = Uri.parse('${AppEnv.onlineBase}catalog-updates/$key/run/');
+    return _sendJsonMap(url, method: 'POST', auth: true, timeout: timeout);
   }
 
   // ───────────────── ONLINE / USER BRAND PROFIT ─────────────────

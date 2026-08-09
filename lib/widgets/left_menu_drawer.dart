@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../app/app_env.dart';
+import '../data/models/catalog_update.dart';
 import '../routing/route_names.dart';
 import '../state/app_info_provider.dart';
+import '../state/catalog_update_provider.dart';
 import '../state/session_provider.dart';
 
 class LeftMenuDrawer extends ConsumerWidget {
@@ -138,6 +140,16 @@ class LeftMenuDrawer extends ConsumerWidget {
                               Navigator.pop(context);
                             },
                           ),
+                        if (session.isSuperuser)
+                          ExpansionTile(
+                            leading: const Icon(Icons.cloud_sync_outlined),
+                            title: const Text('Update Catalog'),
+                            childrenPadding: const EdgeInsets.only(left: 16),
+                            children: [
+                              for (final target in kCatalogTargets)
+                                _CatalogUpdateTile(target: target),
+                            ],
+                          ),
                       ],
                     ),
                     const Divider(),
@@ -189,4 +201,69 @@ class LeftMenuDrawer extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// A single catalog-update entry. Tapping fires the job and leaves the drawer
+/// open, so progress and the result stay visible; run state lives in
+/// [catalogUpdateProvider] so it also survives the drawer being closed.
+class _CatalogUpdateTile extends ConsumerWidget {
+  final CatalogTarget target;
+
+  const _CatalogUpdateTile({required this.target});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final run = ref.watch(catalogUpdateProvider).stateFor(target.key);
+    final scheme = Theme.of(context).colorScheme;
+
+    Widget? trailing;
+    switch (run.status) {
+      case CatalogRunStatus.running:
+        trailing = const SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        );
+        break;
+      case CatalogRunStatus.success:
+        trailing =
+            Icon(Icons.check_circle_outline, size: 20, color: scheme.primary);
+        break;
+      case CatalogRunStatus.failure:
+        trailing = Icon(Icons.error_outline, size: 20, color: scheme.error);
+        break;
+      case CatalogRunStatus.idle:
+        trailing = null;
+        break;
+    }
+
+    return ListTile(
+      leading: Icon(target.icon),
+      title: Text(target.label),
+      subtitle: run.message == null
+          ? null
+          : Text(
+              run.elapsed == null
+                  ? run.message!
+                  : '${run.message!} · ${_formatElapsed(run.elapsed!)}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: run.status == CatalogRunStatus.failure
+                    ? scheme.error
+                    : null,
+              ),
+            ),
+      trailing: trailing,
+      enabled: !run.isRunning,
+      onTap: run.isRunning
+          ? null
+          : () => ref.read(catalogUpdateProvider.notifier).run(target),
+    );
+  }
+}
+
+String _formatElapsed(Duration d) {
+  final seconds = d.inMilliseconds / 1000.0;
+  return '${seconds.toStringAsFixed(1)}s';
 }

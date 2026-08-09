@@ -13,6 +13,8 @@ import 'package:evolution_portal/widgets/page_action_bar.dart'
     show pageActions, PageAction; // listen only
 import 'package:evolution_portal/widgets/bottom_nav.dart';
 import 'app_scroll_behavior.dart';
+import '../data/models/catalog_update.dart';
+import '../state/catalog_update_provider.dart';
 import '../state/current_balance_provider.dart';
 import '../state/session_provider.dart';
 import '../state/page_refresh_provider.dart';
@@ -86,14 +88,17 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
     }
   }
 
-  void _bindActiveScrollable(ScrollableState? scrollable, {
+  void _bindActiveScrollable(
+    ScrollableState? scrollable, {
     bool updateVisibility = true,
   }) {
     _activeScrollable = scrollable;
 
     final hasActivePopup =
         EvolutionScrollRegistry.activePopupContext.value != null;
-    if (!hasActivePopup && scrollable != null && _isScrollableUsable(scrollable)) {
+    if (!hasActivePopup &&
+        scrollable != null &&
+        _isScrollableUsable(scrollable)) {
       _lastPageScrollable = scrollable;
     }
 
@@ -170,8 +175,8 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
       final hasScroll = n.metrics.maxScrollExtent > 0;
       final shouldShow =
           EvolutionScrollRegistry.activePopupContext.value == null &&
-          hasScroll &&
-          n.metrics.pixels > _scrollToTopThreshold;
+              hasScroll &&
+              n.metrics.pixels > _scrollToTopThreshold;
 
       if (shouldShow != _showScrollToTop && mounted) {
         setState(() => _showScrollToTop = shouldShow);
@@ -443,12 +448,12 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
     return found;
   }
 
-
   ScrollableState? _scrollableFromPopupContext({Axis? preferredAxis}) {
     final popupContext = EvolutionScrollRegistry.activePopupContext.value;
     if (popupContext == null) return null;
 
-    final popupScrollable = EvolutionScrollRegistry.findFirstDescendantScrollable(
+    final popupScrollable =
+        EvolutionScrollRegistry.findFirstDescendantScrollable(
       popupContext,
       axis: preferredAxis,
     );
@@ -692,6 +697,31 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
   Widget build(BuildContext context) {
     final router = _router ?? GoRouter.of(context);
 
+    // Catalog updates are fired from the drawer but can take minutes. Report
+    // the outcome from the shell so the result still surfaces if the drawer
+    // was closed while the job was in flight.
+    ref.listen<CatalogRunEvent?>(
+      catalogUpdateProvider.select((s) => s.lastEvent),
+      (previous, next) {
+        if (next == null || identical(previous, next)) return;
+        final scheme = Theme.of(context).colorScheme;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                next.ok
+                    ? '${next.target.label}: ${next.message} · '
+                        '${(next.elapsed.inMilliseconds / 1000.0).toStringAsFixed(1)}s'
+                    : '${next.target.label} failed: ${next.message}',
+              ),
+              backgroundColor: next.ok ? null : scheme.error,
+              duration: Duration(seconds: next.ok ? 4 : 8),
+            ),
+          );
+      },
+    );
+
     return ValueListenableBuilder<RouteInformation>(
       valueListenable: router.routeInformationProvider,
       builder: (context, info, _) {
@@ -763,29 +793,29 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
 
             //const FadeBackground(), // keep disabled if you want
             Scaffold(
-                backgroundColor: Colors.transparent,
-                drawer: const LeftMenuDrawer(),
-                appBar: const PreferredSize(
-                  preferredSize: Size.fromHeight(kToolbarHeight),
-                  child: TopBar(),
-                ),
-                body: Column(
-                  children: [
-                    buildNavStrip(),
-                    const SizedBox(height: 6),
-                    Expanded(
-                      child: KeyedSubtree(
-                        key: _scrollRootKey,
-                        child: NotificationListener<ScrollNotification>(
-                          onNotification: _onScrollNotification,
-                          child: widget.body,
-                        ),
+              backgroundColor: Colors.transparent,
+              drawer: const LeftMenuDrawer(),
+              appBar: const PreferredSize(
+                preferredSize: Size.fromHeight(kToolbarHeight),
+                child: TopBar(),
+              ),
+              body: Column(
+                children: [
+                  buildNavStrip(),
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: KeyedSubtree(
+                      key: _scrollRootKey,
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: _onScrollNotification,
+                        child: widget.body,
                       ),
                     ),
-                  ],
-                ),
-                bottomNavigationBar: BottomNav(location: loc),
+                  ),
+                ],
               ),
+              bottomNavigationBar: BottomNav(location: loc),
+            ),
 
             // Scroll-to-top icon (only appears once there is vertical scroll).
             _buildFabStack(context, loc),
