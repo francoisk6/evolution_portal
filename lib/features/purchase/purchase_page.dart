@@ -25,6 +25,7 @@ import '../../widgets/error_message.dart';
 import '../../widgets/grid_scroll_container.dart';
 import '../../widgets/page_nav.dart';
 import '../../widgets/history_text_field.dart';
+import '../../utils/notify.dart';
 
 class PurchasePage extends ConsumerStatefulWidget {
   const PurchasePage({super.key});
@@ -950,6 +951,9 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
         behavior: SnackBarBehavior.floating,
         backgroundColor: error ? Colors.red.shade700 : Colors.green.shade700,
         content: Text(m),
+        duration: error ? kErrorSnackDuration : kSuccessSnackDuration,
+        showCloseIcon: error,
+        closeIconColor: Colors.white,
       ),
     );
   }

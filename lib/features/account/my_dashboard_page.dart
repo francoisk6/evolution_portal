@@ -11,6 +11,7 @@ import '../../state/dashboard_provider.dart';
 import '../../state/session_provider.dart';
 import '../../utils/money_format.dart';
 import '../../widgets/page_action_bar.dart' show PageActions, PageAction;
+import '../../utils/notify.dart';
 
 enum DashboardMetric {
   dealer,
@@ -425,7 +426,11 @@ class _MyDashboardPageState extends ConsumerState<MyDashboardPage> {
     ref.listen<DashboardState>(dashboardProvider, (prev, next) {
       if (next.error != null && next.error != prev?.error) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Dashboard load failed: ${next.error}')),
+          SnackBar(
+            content: Text('Dashboard load failed: ${next.error}'),
+            duration: kErrorSnackDuration,
+            showCloseIcon: true,
+          ),
         );
       }
     });

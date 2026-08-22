@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../state/current_balance_provider.dart';
 import '../state/currency_provider.dart';
 import '../utils/money_format.dart';
+import '../utils/notify.dart';
 
 // Keep the legacy currencyProvider (used by older pages / filters) in sync with the
 // server/session active currency maintained by CurrentBalanceNotifier.
@@ -45,6 +46,7 @@ void _maybeShowServerSnack(BuildContext context) {
         behavior: SnackBarBehavior.floating,
         backgroundColor: Colors.green.shade700,
         content: Text(msg),
+        duration: kSuccessSnackDuration,
       ),
     );
   } else if (!ok && err != null && err.isNotEmpty) {
@@ -54,6 +56,9 @@ void _maybeShowServerSnack(BuildContext context) {
         behavior: SnackBarBehavior.floating,
         backgroundColor: Colors.red.shade700,
         content: Text(err),
+        duration: kErrorSnackDuration,
+        showCloseIcon: true,
+        closeIconColor: Colors.white,
       ),
     );
   }
@@ -212,6 +217,9 @@ class CurrencyCardStrip extends ConsumerWidget {
                               behavior: SnackBarBehavior.floating,
                               backgroundColor: Colors.red.shade700,
                               content: Text(msg),
+                              duration: kErrorSnackDuration,
+                              showCloseIcon: true,
+                              closeIconColor: Colors.white,
                             ),
                           );
                         }

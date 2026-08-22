@@ -20,6 +20,7 @@ import '../../utils/note_pretty.dart';
 import '../../utils/file_download.dart';
 import '../../widgets/page_action_bar.dart'
     show PageActions, PageAction, pageActions;
+import '../../utils/notify.dart';
 
 class TransactionHistoryPage extends ConsumerStatefulWidget {
   const TransactionHistoryPage({super.key});
@@ -476,7 +477,11 @@ class _TransactionHistoryPageState
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to export Excel: $e')),
+        SnackBar(
+          content: Text('Failed to export Excel: $e'),
+          duration: kErrorSnackDuration,
+          showCloseIcon: true,
+        ),
       );
     } finally {
       if (mounted && dialogOpen) {

@@ -3,6 +3,11 @@ import '../services/api_service.dart';
 
 String _clean(Object e) => e.toString().replaceFirst('Exception: ', '').trim();
 
+/// How long transient notices stay on screen. Errors linger much longer than
+/// confirmations so there is time to actually read them.
+const Duration kSuccessSnackDuration = Duration(seconds: 4);
+const Duration kErrorSnackDuration = Duration(seconds: 12);
+
 void showSuccess(BuildContext context, String msg) {
   if (msg.trim().isEmpty) return;
   ScaffoldMessenger.of(context).showSnackBar(
@@ -10,6 +15,7 @@ void showSuccess(BuildContext context, String msg) {
       content: Text(msg),
       backgroundColor: Colors.green.shade700,
       behavior: SnackBarBehavior.floating,
+      duration: kSuccessSnackDuration,
     ),
   );
 }
@@ -21,6 +27,9 @@ void showError(BuildContext context, String msg) {
       content: Text(msg),
       backgroundColor: Colors.red.shade700,
       behavior: SnackBarBehavior.floating,
+      duration: kErrorSnackDuration,
+      showCloseIcon: true,
+      closeIconColor: Colors.white,
     ),
   );
 }

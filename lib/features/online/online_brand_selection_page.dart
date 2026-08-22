@@ -25,6 +25,7 @@ import '../../widgets/page_nav.dart';
 import '../../widgets/history_text_field.dart';
 import 'widgets/online_brand_card.dart';
 import 'widgets/cv_pricing_brand_card.dart';
+import '../../utils/notify.dart';
 
 class OnlineBrandSelectionPage extends ConsumerStatefulWidget {
   final int groupDetailId;
@@ -283,6 +284,9 @@ class _OnlineBrandSelectionPageState
       behavior: SnackBarBehavior.floating,
       backgroundColor: error ? Colors.red.shade700 : Colors.green.shade700,
       content: Text(m),
+      duration: error ? kErrorSnackDuration : kSuccessSnackDuration,
+      showCloseIcon: error,
+      closeIconColor: Colors.white,
     ));
   }
 

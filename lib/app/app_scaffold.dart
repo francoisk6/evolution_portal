@@ -20,6 +20,7 @@ import '../state/session_provider.dart';
 import '../state/page_refresh_provider.dart';
 import '../state/nav_history_provider.dart';
 import '../routing/route_names.dart';
+import '../utils/notify.dart';
 
 class AppScaffold extends ConsumerStatefulWidget {
   final Widget body;
@@ -716,7 +717,9 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
                     : '${next.target.label} failed: ${next.message}',
               ),
               backgroundColor: next.ok ? null : scheme.error,
-              duration: Duration(seconds: next.ok ? 4 : 8),
+              duration: next.ok ? kSuccessSnackDuration : kErrorSnackDuration,
+              showCloseIcon: !next.ok,
+              closeIconColor: scheme.onError,
             ),
           );
       },

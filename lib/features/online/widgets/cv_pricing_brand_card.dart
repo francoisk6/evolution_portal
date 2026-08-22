@@ -8,6 +8,7 @@ import '../../../data/models/online_cv_receiver_info.dart';
 import '../../../services/api_service.dart';
 import '../../../state/online_flow_state_provider.dart';
 import '../../../widgets/error_message.dart';
+import '../../../utils/notify.dart';
 
 /// Special CableVision (CV) pricing card.
 ///
@@ -827,6 +828,9 @@ class _CvPricingBrandCardState extends State<CvPricingBrandCard> {
             behavior: SnackBarBehavior.floating,
             backgroundColor: Colors.red.shade700,
             content: Text(_firstMissingReason()),
+            duration: kErrorSnackDuration,
+            showCloseIcon: true,
+            closeIconColor: Colors.white,
           ),
         );
       }

@@ -752,6 +752,9 @@ class _EditableRowState extends State<_EditableRow> {
               Text(e.toString().replaceFirst('Exception: ', '')),
           backgroundColor: Colors.red.shade700,
           behavior: SnackBarBehavior.floating,
+          duration: kErrorSnackDuration,
+          showCloseIcon: true,
+          closeIconColor: Colors.white,
         ));
       }
     } finally {
