@@ -895,6 +895,20 @@ class _OnlineBrandSelectionPageState
                                         autocorrect: false,
                                         enableSuggestions: false,
                                         style: const TextStyle(fontSize: 13),
+                                        // Pre-warm: fire the customer-info lookup
+                                        // the moment the dealer finishes entering
+                                        // the account (done/enter), so the slow
+                                        // portal scrape starts a beat earlier
+                                        // instead of only when "Info" is tapped.
+                                        onSubmitted: (_) {
+                                          if (!_infoLoading &&
+                                              _accountCtl.text.trim().isNotEmpty) {
+                                            _fetchCustomerInfo(
+                                              groupSubdetailId:
+                                                  payload.active.subdetailId,
+                                            );
+                                          }
+                                        },
                                         decoration: InputDecoration(
                                           hintText: helperText,
                                           isDense: true,
