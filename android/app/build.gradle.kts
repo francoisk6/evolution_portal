@@ -80,9 +80,20 @@ android {
             // Use your release keystore (NOT debug)
             signingConfig = signingConfigs.getByName("release")
 
-            // Keep these defaults unless you explicitly want shrinking/obfuscation
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // R8 on: Play flags DEX optimization below threshold when this is
+            // off. Only the Android/Kotlin side is affected - Dart code is
+            // AOT-compiled and untouched - so the blast radius is plugin glue
+            // reached by reflection. Plugins ship their own consumer rules;
+            // app-specific keeps go in proguard-rules.pro.
+            //
+            // Keep build/app/outputs/mapping/<flavor>Release/mapping.txt for
+            // each release or crash reports come back unreadable.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
