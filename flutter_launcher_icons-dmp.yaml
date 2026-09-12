@@ -1,0 +1,14 @@
+# Per-flavor launcher icon for the standalone DMP build.
+#
+# Generates into android/app/src/dmp/res/, which overrides the shared icon in
+# src/main/res for the dmp flavor only. The portal flavor is untouched and keeps
+# the icon generated from the pubspec.yaml config.
+#
+# Regenerate after changing the source image:
+#   dart run flutter_launcher_icons
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path_android: "assets/launcher_icon_dmp.png"
+  adaptive_icon_foreground: "assets/launcher_icon_dmp.png"
+  adaptive_icon_background: "#0A1A3C"
