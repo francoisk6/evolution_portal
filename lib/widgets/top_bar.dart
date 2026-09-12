@@ -8,6 +8,7 @@ import '../routing/route_names.dart';
 import '../state/session_provider.dart';
 import '../services/auth_service.dart';
 import '../app/app_cache_manager.dart';
+import 'brand_logo.dart';
 import 'notification_bell.dart';
 
 class TopBar extends ConsumerWidget {
@@ -61,7 +62,7 @@ class TopBar extends ConsumerWidget {
         onTap: () => context.go(R.home),
         child: Row(
           children: [
-            Image.asset('assets/logo.png', height: 28),
+            const BrandLogo(),
           ],
         ),
       ),

@@ -1,7 +1,7 @@
 name: evolution_portal
 publish_to: 'none'
 description: Evolution Portal
-version: 1.2.31+41
+version: 1.2.32+42
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -38,6 +38,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logo.png
+    - assets/logos/
     - assets/backgrounds/tech_bg_3.jpg
 
 flutter_launcher_icons:
