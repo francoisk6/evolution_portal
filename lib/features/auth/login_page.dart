@@ -123,7 +123,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   }
 
   Future<void> _changeWorkspace() async {
-    if (AppEnv.isWebHostWorkspaceLocked) return;
+    if (!AppEnv.canSwitchWorkspace) return;
 
     final selected = await showDialog<WorkspaceConfig>(
       context: context,
@@ -233,7 +233,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ),
-                  if (!AppEnv.isWebHostWorkspaceLocked)
+                  if (AppEnv.canSwitchWorkspace)
                     TextButton(
                       onPressed: _changeWorkspace,
                       child: const Text('Change Workspace'),

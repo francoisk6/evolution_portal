@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +16,9 @@ import 'state/session_provider.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppEnv.initWorkspace();
+  // Best-effort, intentionally not awaited: the workspace list refreshes in the
+  // background so a slow or unreachable server never delays first frame.
+  unawaited(AppEnv.refreshWorkspaces());
   // Pre-warm the SharedPreferences singleton so SessionState._bootstrap()
   // gets a cached instance and completes before the first frame renders,
   // eliminating the auth-state race on cold start.
