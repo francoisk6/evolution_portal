@@ -2109,13 +2109,19 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
   Widget _priceSummaryCard(OnlinePurchaseOrderData data) {
     final currency = data.currency.trim().toUpperCase();
     final dealerText = _dealerTotalCtl.text.trim();
-    final customerText = _customerTotalCtl.text.trim();
-    // No dealer/customer split in an end-user workspace: the buyer is the
-    // customer, so there is no second price to reveal and the eye toggle
-    // would only show the same number twice.
-    final hasDealerPrice = dealerText.isNotEmpty &&
-        dealerText != '—' &&
-        !ref.watch(sessionProvider).isEndUserWorkspace;
+    final isEndUserWorkspace = ref.watch(sessionProvider).isEndUserWorkspace;
+    // An end user is charged dealer_price, so that is what "Customer cost"
+    // must show. The real customer price can carry a brand face value that
+    // bypasses selling_profit_percentage, which would display a figure above
+    // what is actually charged. Display substitution only - nothing is
+    // computed differently.
+    final customerText = isEndUserWorkspace
+        ? dealerText
+        : _customerTotalCtl.text.trim();
+    // ...and with that substitution there is no second price left to reveal,
+    // so the dealer row and its eye toggle go.
+    final hasDealerPrice =
+        dealerText.isNotEmpty && dealerText != '—' && !isEndUserWorkspace;
     final enteredQty = _enteredQuantityFromInput(data);
     final slaveQty = _currentSlaveQuantity(data);
 
