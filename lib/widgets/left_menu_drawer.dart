@@ -119,6 +119,16 @@ class LeftMenuDrawer extends ConsumerWidget {
                             Navigator.pop(context);
                           },
                         ),
+                        if (session.isSuperuser)
+                          ListTile(
+                            leading: const Icon(Icons.sim_card_outlined),
+                            title: const Text('TerraNet stock'),
+                            selected: isRoute(R.adminTerranetStock),
+                            onTap: () {
+                              context.go(R.adminTerranetStock);
+                              Navigator.pop(context);
+                            },
+                          ),
                         ListTile(
                           leading: const Icon(Icons.hub_outlined),
                           title: const Text('Workspace Ops'),

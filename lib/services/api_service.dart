@@ -1327,6 +1327,48 @@ class ApiService {
     return _getJsonMap(url, auth: true);
   }
 
+  // ───────────────── TERRANET STOCK (superuser) ─────────────────
+
+  /// GET /api/online/terranet/stock/
+  ///
+  /// Last completed stock reading with its age. Never blocks — the reading
+  /// itself is taken by [refreshTerranetStock]. Read-only: nothing here can
+  /// spend a card.
+  Future<Map<String, dynamic>> getTerranetStock() async {
+    await _ensureTokenLoaded();
+    if (_token == null || _token!.isEmpty) {
+      await _forceReloadToken();
+    }
+
+    final url = Uri.parse('${AppEnv.onlineBase}terranet/stock/');
+    return _getJsonMap(url, auth: true);
+  }
+
+  /// POST /api/online/terranet/stock/refresh/
+  ///
+  /// Queues a reading — 202 with a job_id, or 200 with queued:false when one is
+  /// already running (that job is reused rather than stacking another).
+  ///
+  /// Explicit user action ONLY. The reading drives the same single browser
+  /// worker that places refills and issues vouchers, so a refresh taken during
+  /// trading puts a real purchase about 40 seconds behind it. Never call this
+  /// from a timer, a cron, or a pull-to-refresh.
+  Future<Map<String, dynamic>> refreshTerranetStock() async {
+    await _ensureTokenLoaded();
+    if (_token == null || _token!.isEmpty) {
+      await _forceReloadToken();
+    }
+
+    final url = Uri.parse('${AppEnv.onlineBase}terranet/stock/refresh/');
+    final res = await http.post(url, headers: _jsonHeaders(auth: true));
+    final env = _envelope(res);
+    if (!env.ok) {
+      _fail(env,
+          'Failed to queue a TerraNet stock reading (HTTP ${env.status}).');
+    }
+    return env.body ?? const <String, dynamic>{};
+  }
+
   // ───────────────── ACCOUNT / ORDER ─────────────────
 
   /// GET /api/account/online-purchase/
