@@ -11,14 +11,6 @@ class SessionState extends ChangeNotifier {
   bool? _usePinOnOrder;
   bool _hideDealerPrice = false;
   String _workspaceTiers = 'dealers';
-
-  /// Display-time switch for parsed transaction amounts.
-  ///
-  /// Static because hideDealerPrice is already threaded through seven widget
-  /// classes in the history screen; threading a second flag to reach the same
-  /// places would be far more invasive than substituting once where the
-  /// amounts are parsed. Read by TxAmounts/TransactionTotals.fromJson.
-  static bool showChargedPriceAsCustomerDisplay = false;
   bool _isStaff = false;
   bool _isSuperuser = false;
   String _username = '';
@@ -42,19 +34,12 @@ class SessionState extends ChangeNotifier {
   /// They see one price and are addressed as a customer, not a dealer.
   bool get isEndUserWorkspace => _workspaceTiers == 'end_users';
 
-  /// In an end-user workspace the buyer is charged dealer_price, so that is the
-  /// number shown - under the "Customer" label, since they are a customer. The
-  /// separate customer price is hidden: it can carry a brand face value that
-  /// bypasses selling_profit_percentage, and showing it would display a figure
-  /// above what is actually charged.
-  ///
-  /// Display only. No price is computed differently.
+  /// In an end-user workspace the buyer is the customer, so only the customer
+  /// column is shown. The server already holds the two equal there: the catalog
+  /// sync clears brand.native_customer_price and seeds
+  /// selling_profit_percentage=1, so customer_price == dealer_price.
   bool get hideDealerPrice => _hideDealerPrice || isEndUserWorkspace;
   bool get showDealerPrice => !hideDealerPrice;
-
-  /// True when the charged price should be rendered in place of the customer
-  /// price, rather than alongside it.
-  bool get showChargedPriceAsCustomer => isEndUserWorkspace;
   bool get isStaff => _isStaff;
   bool get isSuperuser => _isSuperuser;
   bool get isAdmin => _isStaff || _isSuperuser;
@@ -88,7 +73,6 @@ class SessionState extends ChangeNotifier {
         .trim()
         .toLowerCase();
     if (tiers.isNotEmpty) _workspaceTiers = tiers;
-    showChargedPriceAsCustomerDisplay = isEndUserWorkspace;
     _isStaff = _asBool(data['is_staff'] ?? profileMap['is_staff']);
     _isSuperuser = _asBool(data['is_superuser'] ?? profileMap['is_superuser']);
     final u = (data['username'] ?? profileMap['username'] ?? '').toString().trim();
@@ -191,7 +175,6 @@ class SessionState extends ChangeNotifier {
     _usePinOnOrder = null;
     _hideDealerPrice = false;
     _workspaceTiers = 'dealers';
-    showChargedPriceAsCustomerDisplay = false;
     _isStaff = false;
     _isSuperuser = false;
     notifyListeners();

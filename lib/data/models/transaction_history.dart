@@ -1,5 +1,3 @@
-import '../../state/session_provider.dart';
-
 /// Models for /api/account/transactions/ and /api/account/transactions/<id>/
 ///
 /// Designed to be tolerant to backend variations:
@@ -123,18 +121,11 @@ class TransactionTotals {
   }
 
   factory TransactionTotals.fromJson(Map<String, dynamic> m) {
-    // An end user is charged dealer_price, so that is what the "Customer"
-    // column must show. customer_price can carry a brand face value that
-    // bypasses selling_profit_percentage and reads above what is charged.
-    // Display substitution only - the server computes nothing differently.
-    final dealer = (m['dealer_price'] ?? '0').toString();
     return TransactionTotals(
       count: _parseInt(m['count'], fallback: 0),
       costPrice: (m['cost_price'] ?? '0').toString(),
-      dealerPrice: dealer,
-      customerPrice: SessionState.showChargedPriceAsCustomerDisplay
-          ? dealer
-          : (m['customer_price'] ?? '0').toString(),
+      dealerPrice: (m['dealer_price'] ?? '0').toString(),
+      customerPrice: (m['customer_price'] ?? '0').toString(),
       dProfit: (m['d_profit'] ?? '0').toString(),
       aProfit: (m['a_profit'] ?? '0').toString(),
       costPriceOriginal: (m['cost_price_original'] ?? '0').toString(),
@@ -443,14 +434,10 @@ class TxAmounts {
       return fallback;
     }
 
-    // See TransactionTotals.fromJson: display substitution only.
-    final dealer = (m['dealer'] ?? '0').toString();
     return TxAmounts(
       cost: (m['cost'] ?? '0').toString(),
-      dealer: dealer,
-      customer: SessionState.showChargedPriceAsCustomerDisplay
-          ? dealer
-          : (m['customer'] ?? '0').toString(),
+      dealer: (m['dealer'] ?? '0').toString(),
+      customer: (m['customer'] ?? '0').toString(),
       dProfit: pick(
         const [
           'dealer_profit',
