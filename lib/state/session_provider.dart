@@ -10,6 +10,7 @@ class SessionState extends ChangeNotifier {
   String? _avatarUrl;
   bool? _usePinOnOrder;
   bool _hideDealerPrice = false;
+  String _workspaceTiers = 'dealers';
   bool _isStaff = false;
   bool _isSuperuser = false;
   String _username = '';
@@ -24,8 +25,19 @@ class SessionState extends ChangeNotifier {
     return u.startsWith('http:') ? u.replaceFirst('http:', 'https:') : u;
   }
   bool get usePinOnOrder => _usePinOnOrder ?? true;
-  bool get hideDealerPrice => _hideDealerPrice;
-  bool get showDealerPrice => !_hideDealerPrice;
+  /// Selling tiers of the workspace this session belongs to.
+  /// 'dealers'   - super-dealer -> dealers -> customers
+  /// 'end_users' - admin sells to customers directly, no middle dealer
+  String get workspaceTiers => _workspaceTiers;
+
+  /// True when the signed-in user buys for themselves rather than to resell.
+  /// They see one price and are addressed as a customer, not a dealer.
+  bool get isEndUserWorkspace => _workspaceTiers == 'end_users';
+
+  /// In an end-user workspace there is no second price to reveal, so the
+  /// dealer/customer split is collapsed regardless of the per-user flag.
+  bool get hideDealerPrice => _hideDealerPrice || isEndUserWorkspace;
+  bool get showDealerPrice => !hideDealerPrice;
   bool get isStaff => _isStaff;
   bool get isSuperuser => _isSuperuser;
   bool get isAdmin => _isStaff || _isSuperuser;
@@ -54,6 +66,11 @@ class SessionState extends ChangeNotifier {
 
     _usePinOnOrder = _asBool(profileMap['use_pin_on_order'] ?? data['use_pin_on_order']);
     _hideDealerPrice = _asBool(profileMap['hide_dealer_price'] ?? data['hide_dealer_price']);
+    final tiers = (profileMap['workspace_tiers'] ?? data['workspace_tiers'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+    if (tiers.isNotEmpty) _workspaceTiers = tiers;
     _isStaff = _asBool(data['is_staff'] ?? profileMap['is_staff']);
     _isSuperuser = _asBool(data['is_superuser'] ?? profileMap['is_superuser']);
     final u = (data['username'] ?? profileMap['username'] ?? '').toString().trim();
@@ -155,6 +172,7 @@ class SessionState extends ChangeNotifier {
     _avatarUrl = null;
     _usePinOnOrder = null;
     _hideDealerPrice = false;
+    _workspaceTiers = 'dealers';
     _isStaff = false;
     _isSuperuser = false;
     notifyListeners();

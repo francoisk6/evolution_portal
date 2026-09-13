@@ -125,7 +125,8 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
       _quantity = saved.quantity;
       _quantityCtl.text = saved.quantity.toString();
     }
-    _showPriceDetails = saved.showPriceDetails;
+    _showPriceDetails = saved.showPriceDetails &&
+        !ref.read(sessionProvider).isEndUserWorkspace;
     _pendingParamValues = Map<String, String>.from(saved.params);
     _pendingPageScrollOffset = saved.pageScrollOffset;
     // Restore the idempotency key so a page refresh reuses the same UUID.
@@ -2109,7 +2110,12 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
     final currency = data.currency.trim().toUpperCase();
     final dealerText = _dealerTotalCtl.text.trim();
     final customerText = _customerTotalCtl.text.trim();
-    final hasDealerPrice = dealerText.isNotEmpty && dealerText != '—';
+    // No dealer/customer split in an end-user workspace: the buyer is the
+    // customer, so there is no second price to reveal and the eye toggle
+    // would only show the same number twice.
+    final hasDealerPrice = dealerText.isNotEmpty &&
+        dealerText != '—' &&
+        !ref.watch(sessionProvider).isEndUserWorkspace;
     final enteredQty = _enteredQuantityFromInput(data);
     final slaveQty = _currentSlaveQuantity(data);
 
