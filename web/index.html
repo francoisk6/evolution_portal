@@ -28,6 +28,27 @@
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
+  <script>
+  // Per-workspace favicon. The host names the workspace
+  // (<slug>.evolution-portal.com), and the tab icon is on screen well before
+  // Flutter boots, so this runs here rather than from Dart - driving it from
+  // AppEnv would show Evolution's mark in a tenant tab during every load.
+  //
+  // A workspace with no artwork in web/favicons/ keeps the default rather
+  // than being given Evolution's, matching how BrandLogo refuses to put the
+  // wrong brand in a tenant's app.
+  (function () {
+    var match = /^([a-z0-9-]+)\.evolution-portal\.com$/i.exec(location.hostname);
+    if (!match || match[1].toLowerCase() === 'www') return;
+
+    var link = document.querySelector('link[rel="icon"]');
+    if (!link) return;
+
+    var probe = new Image();
+    probe.onload = function () { link.href = probe.src; };
+    probe.src = 'favicons/' + match[1].toLowerCase() + '.png';
+  })();
+  </script>
 
   <title>evolution_portal</title>
   <link rel="manifest" href="manifest.json">
