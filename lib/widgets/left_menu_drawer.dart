@@ -183,7 +183,7 @@ class LeftMenuDrawer extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
-                    '© 2026 Evolution Portal',
+                    '© 2026 ${AppEnv.portalName}',
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall

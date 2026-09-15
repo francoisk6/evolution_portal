@@ -153,7 +153,7 @@ class EvolutionApp extends ConsumerWidget {
     final router = ref.watch(appRouterProvider);
 
     return MaterialApp.router(
-      title: 'Evolution Portal',
+      title: AppEnv.portalName,
       debugShowCheckedModeBanner: false,
       theme: buildV2LightTheme(),
       scrollBehavior: const EvolutionScrollBehavior(showScrollbars: true),

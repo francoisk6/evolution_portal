@@ -155,6 +155,19 @@ class AppEnv {
     return _selectedWorkspace.displayName;
   }
 
+  /// Name used wherever the app names itself in prose: the window/tab title,
+  /// the drawer copyright line, the About owner row.
+  ///
+  /// Main keeps "Evolution Portal"; a tenant workspace carries its own name,
+  /// so a DMP session reads "DMP Portal" throughout. A workspace already named
+  /// "... Portal" is left alone rather than doubled.
+  static String get portalName {
+    final name = brandName.trim();
+    if (name.isEmpty) return '$_brandName Portal';
+    if (name.toLowerCase().endsWith('portal')) return name;
+    return '$name Portal';
+  }
+
   /// True when a switcher is worth showing at all.
   static bool get canSwitchWorkspace =>
       !isWorkspaceLocked && _workspaces.length > 1;

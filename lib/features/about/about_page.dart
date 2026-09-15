@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/app_env.dart';
 import '../../state/app_info_provider.dart';
 import '../../state/version_provider.dart';
 import '../../widgets/error_message.dart';
@@ -176,7 +177,7 @@ class AboutPage extends ConsumerWidget {
                         'Developed by',
                         'Francois Kassis (+96170238494)',
                       ),
-                      _kv(context, 'Owner', 'Evolution Portal'),
+                      _kv(context, 'Owner', AppEnv.portalName),
                     ],
                   ),
                 ),
