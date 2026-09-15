@@ -111,6 +111,17 @@ class AppEnv {
   static WorkspaceConfig _selectedWorkspace = defaultWorkspace;
   static bool _webHostWorkspaceLocked = false;
 
+  /// Slug named by the current web host, when it names one. Kept even while it
+  /// is still unresolvable (the workspace list has not arrived yet) so the pin
+  /// can be applied the moment the list lands.
+  static String? _pendingHostSlug;
+
+  /// Workspace resolved by asking the host's own API who it is. Held separately
+  /// because a later registry refresh replaces [_workspaces] wholesale, and a
+  /// registry that has not been told about this workspace would otherwise drop
+  /// the one entry the current session depends on.
+  static WorkspaceConfig? _hostResolvedWorkspace;
+
   static WorkspaceConfig get selectedWorkspace => _selectedWorkspace;
   static bool get isWebHostWorkspaceLocked => _webHostWorkspaceLocked;
 
@@ -180,13 +191,38 @@ class AppEnv {
     // whatever was available last time instead of collapsing to Main.
     await _loadCachedWorkspaces();
 
-    final hostWorkspace = _workspaceFromCurrentWebHost();
+    // A <slug>.evolution-portal.com host names its workspace even when that
+    // slug is not in the list yet, which is the normal case on a browser that
+    // has never loaded the app: no cache, so the list is still just the seed.
+    _pendingHostSlug = _webHostWorkspaceSlug();
+
+    var hostWorkspace = _workspaceFromCurrentWebHost();
+    if (hostWorkspace == null && _pendingHostSlug != null) {
+      // The host asks for a workspace the cached list cannot resolve. Resolving
+      // it is worth the wait: silently falling back to Main would point login
+      // at the wrong API.
+      //
+      // Ask the workspace's own API host first. It is the authority on its own
+      // identity and its domain follows from the slug, so this succeeds on a
+      // first visit even before the main registry knows the workspace exists.
+      hostWorkspace = await _resolveWorkspaceFromOwnApiHost(_pendingHostSlug!);
+
+      // Otherwise fall back to the main registry, which covers a workspace
+      // whose API host does not follow the naming convention.
+      if (hostWorkspace == null) {
+        await refreshWorkspaces();
+        hostWorkspace = _workspaceFromCurrentWebHost();
+      }
+    }
+
     if (hostWorkspace != null) {
       _selectedWorkspace = hostWorkspace;
       _webHostWorkspaceLocked = true;
       return;
     }
 
+    _pendingHostSlug = null;
+    _hostResolvedWorkspace = null;
     _webHostWorkspaceLocked = false;
     final prefs = await SharedPreferences.getInstance();
     final savedSlug = prefs.getString(_workspacePrefsKey);
@@ -216,6 +252,7 @@ class AppEnv {
       if (parsed.isEmpty) return false;
 
       _workspaces = parsed;
+      _mergeHostResolvedWorkspace();
       _reconcileSelection();
 
       final prefs = await SharedPreferences.getInstance();
@@ -233,7 +270,10 @@ class AppEnv {
       final cached = prefs.getString(_workspaceCachePrefsKey);
       if (cached == null || cached.isEmpty) return;
       final parsed = _parseWorkspaces(cached);
-      if (parsed.isNotEmpty) _workspaces = parsed;
+      if (parsed.isNotEmpty) {
+        _workspaces = parsed;
+        _mergeHostResolvedWorkspace();
+      }
     } catch (error) {
       debugPrint('AppEnv._loadCachedWorkspaces failed: $error');
     }
@@ -265,10 +305,68 @@ class AppEnv {
     return result;
   }
 
+  /// Ask `<slug>api.<webRootHost>` to identify itself.
+  ///
+  /// The workspace API hosts are named after their slug (see the standalone
+  /// build example above), and every one of them serves the workspace list
+  /// endpoint, so a subdomain visit can be resolved without the main registry
+  /// having been updated. Best-effort: returns null on any failure, and only
+  /// accepts an entry that actually claims the requested slug.
+  static Future<WorkspaceConfig?> _resolveWorkspaceFromOwnApiHost(
+    String slug, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    if (envMode != AppEnvMode.prod) return null;
+
+    final uri = Uri.parse('https://${slug}api.$webRootHost/api/workspaces/');
+    try {
+      final response = await http
+          .get(uri, headers: const {'Accept': 'application/json'})
+          .timeout(timeout);
+      if (response.statusCode != 200) return null;
+
+      final normalized = slug.toLowerCase();
+      for (final workspace in _parseWorkspaces(response.body)) {
+        if (workspace.slug.toLowerCase() != normalized) continue;
+        _hostResolvedWorkspace = workspace;
+        _mergeHostResolvedWorkspace();
+        return workspace;
+      }
+    } catch (error) {
+      debugPrint('AppEnv._resolveWorkspaceFromOwnApiHost failed: $error');
+    }
+    return null;
+  }
+
+  /// Add the host-resolved workspace to [_workspaces] when the current list
+  /// does not already carry its slug.
+  static void _mergeHostResolvedWorkspace() {
+    final resolved = _hostResolvedWorkspace;
+    if (resolved == null) return;
+
+    final normalized = resolved.slug.toLowerCase();
+    for (final workspace in _workspaces) {
+      if (workspace.slug.toLowerCase() == normalized) return;
+    }
+    _workspaces = <WorkspaceConfig>[..._workspaces, resolved];
+  }
+
   /// Keep the current selection pointing at a workspace that still exists,
   /// picking up any change to its base URL. Falls back to the first entry when
   /// the selected workspace is gone from the list.
   static void _reconcileSelection() {
+    // A host-pinned session follows its host, not whatever happened to be
+    // selected while the slug was still unresolvable.
+    final pendingSlug = _pendingHostSlug;
+    if (pendingSlug != null) {
+      final hostWorkspace = workspaceBySlug(pendingSlug);
+      if (hostWorkspace != null) {
+        _selectedWorkspace = hostWorkspace;
+        _webHostWorkspaceLocked = true;
+        return;
+      }
+    }
+
     final current = _selectedWorkspace.slug.toLowerCase();
     for (final workspace in _workspaces) {
       if (workspace.slug.toLowerCase() == current) {
@@ -283,10 +381,10 @@ class AppEnv {
     // A locked build or a host-pinned web session must never change workspace.
     if (isBuildLocked) return;
 
+    if (_webHostWorkspaceLocked) return;
+
     final next = workspaceBySlug(slug) ?? defaultWorkspace;
     _selectedWorkspace = next;
-
-    if (_webHostWorkspaceLocked) return;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_workspacePrefsKey, next.slug);
@@ -325,13 +423,8 @@ class AppEnv {
     // Production subdomain routing:
     // <slug>.evolution-portal.com => workspace with that slug, when one is
     // registered in [workspaces] above.
-    final suffix = '.$webRootHost';
-    if (host.endsWith(suffix)) {
-      final subdomain = host.substring(0, host.length - suffix.length);
-      if (subdomain.isEmpty || subdomain == 'www') {
-        return defaultWorkspace;
-      }
-
+    final subdomain = _webHostWorkspaceSlug();
+    if (subdomain != null) {
       final workspace = workspaceBySlug(subdomain);
       if (workspace != null) return workspace;
     }
@@ -339,6 +432,28 @@ class AppEnv {
     // Unknown web hosts keep the existing manual selector behavior. This keeps
     // localhost, staging, preview, and IP-based deployments flexible.
     return null;
+  }
+
+  /// Workspace slug named by the current web host, or null when the host names
+  /// none (root host, www, localhost, an API alias, or a non-production host).
+  ///
+  /// Purely syntactic: it does not require the slug to be a known workspace,
+  /// which is what lets a first visit to an unseen subdomain still be pinned.
+  static String? _webHostWorkspaceSlug() {
+    if (!kIsWeb) return null;
+
+    final host = Uri.base.host.trim().toLowerCase();
+    if (_isLocalOrEmptyWebHost(host)) return null;
+    if (host == webRootHost || host == 'www.$webRootHost') return null;
+
+    final suffix = '.$webRootHost';
+    if (!host.endsWith(suffix)) return null;
+
+    final subdomain = host.substring(0, host.length - suffix.length);
+    if (subdomain.isEmpty || subdomain == 'www') return null;
+    // A multi-label subdomain is not a slug.
+    if (subdomain.contains('.')) return null;
+    return subdomain;
   }
 
   static bool _isLocalOrEmptyWebHost(String host) {
