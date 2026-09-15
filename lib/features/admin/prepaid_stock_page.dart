@@ -408,7 +408,7 @@ class _PrepaidStockPageState extends ConsumerState<PrepaidStockPage> {
   }
 
   Future<void> _bootstrap() async {
-    if (!ref.read(sessionProvider).isAdmin) return;
+    if (!ref.read(sessionProvider).isSuperuser) return;
     await _loadUniverse();
     await _loadList();
   }
@@ -1362,7 +1362,7 @@ class _PrepaidStockPageState extends ConsumerState<PrepaidStockPage> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'This page is available for admin users only.',
+                  'This page is available for superusers only.',
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -1427,7 +1427,7 @@ class _PrepaidStockPageState extends ConsumerState<PrepaidStockPage> {
           label: 'Clear', icon: Icons.filter_alt_off, onTap: _clearFilters),
     ];
 
-    if (!session.isAdmin) {
+    if (!session.isSuperuser) {
       return _buildAccessDenied(context);
     }
 

@@ -110,15 +110,16 @@ class LeftMenuDrawer extends ConsumerWidget {
                             Navigator.pop(context);
                           },
                         ),
-                        ListTile(
-                          leading: const Icon(Icons.inventory_2_outlined),
-                          title: const Text('Prepaid cards stock'),
-                          selected: isRoute(R.adminPrepaidStock),
-                          onTap: () {
-                            context.go(R.adminPrepaidStock);
-                            Navigator.pop(context);
-                          },
-                        ),
+                        if (session.isSuperuser)
+                          ListTile(
+                            leading: const Icon(Icons.inventory_2_outlined),
+                            title: const Text('Prepaid cards stock'),
+                            selected: isRoute(R.adminPrepaidStock),
+                            onTap: () {
+                              context.go(R.adminPrepaidStock);
+                              Navigator.pop(context);
+                            },
+                          ),
                         if (session.isSuperuser)
                           ListTile(
                             leading: const Icon(Icons.sim_card_outlined),
