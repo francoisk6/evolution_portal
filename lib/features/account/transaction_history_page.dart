@@ -1846,6 +1846,11 @@ class _SummaryTable extends StatelessWidget {
         !hideDealerPrice && entries.any((e) => _nonZero(e.value.aProfit));
     final showDProfit =
         !hideDealerPrice && entries.any((e) => _nonZero(e.value.dProfit));
+    // Dealer follows the payload rather than a flag. The server omits it where
+    // it has no meaning - an end-user workspace, where dealer price equals
+    // customer price - and a real dealer price is never zero.
+    final showDealer =
+        !hideDealerPrice && entries.any((e) => _nonZero(e.value.dealerPrice));
     final showCount = entries.any((e) => (e.value.count) != 0);
 
     final metrics = <_SumMetric>[
@@ -1856,7 +1861,7 @@ class _SummaryTable extends StatelessWidget {
           label: 'Cost (Orig)',
           value: (t, cur) => _fmt(_costOrigValue(t, cur), cur),
         ),
-      if (!hideDealerPrice)
+      if (showDealer)
         _SumMetric(
             label: 'Dealer', value: (t, cur) => _fmt(t.dealerPrice, cur)),
       _SumMetric(
@@ -2143,6 +2148,10 @@ class _TxGrid extends StatelessWidget {
         !hideDealerPrice && st.items.any((e) => _nonZero(e.amounts.aProfit));
     final hasCostOrig = !hideDealerPrice &&
         st.items.any((e) => _nonZero(e.amounts.costOriginal));
+    // Dealer columns follow the payload: the server omits them where dealer
+    // price equals customer price, and a real dealer price is never zero.
+    final hasDealer =
+        !hideDealerPrice && st.items.any((e) => _nonZero(e.amounts.dealer));
     final hasBalance = st.items.any((e) => (e.balance?.isNotEmpty ?? false));
     final hasUser =
         st.items.any((e) => (e.username?.trim().isNotEmpty ?? false));
@@ -2236,7 +2245,7 @@ class _TxGrid extends StatelessWidget {
             return _fmtMoney(e.amounts.costOriginal, cur);
           },
         ),
-      if (!hideDealerPrice)
+      if (hasDealer)
         _TxGridCol(
           key: 'dealer',
           label: 'Dealer Price',
@@ -2251,7 +2260,7 @@ class _TxGrid extends StatelessWidget {
         align: TextAlign.right,
         cell: (e) => _fmtMoney(e.amounts.customer, e.currency),
       ),
-      if (!hideDealerPrice)
+      if (hasDealer)
         _TxGridCol(
           key: 'd_profit',
           label: 'D Profit',
