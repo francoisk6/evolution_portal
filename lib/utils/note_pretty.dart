@@ -131,6 +131,30 @@ dynamic ensureNoteFields(
   return <String, dynamic>{...additions, ...map};
 }
 
+/// Recursively removes map keys starting with [prefix] (default `_`).
+///
+/// JSON-ish strings are decoded first — the renderers decode them anyway — so
+/// private keys buried inside a stringified payload are dropped too.
+dynamic hideNoteKeysWithPrefix(dynamic note, {String prefix = '_'}) {
+  final v = _maybeDecodeJsonish(_decodeAny(note));
+
+  if (v is Map) {
+    final out = <String, dynamic>{};
+    for (final entry in v.entries) {
+      final key = '${entry.key}'.trim();
+      if (key.startsWith(prefix)) continue;
+      out[key] = hideNoteKeysWithPrefix(entry.value, prefix: prefix);
+    }
+    return out;
+  }
+
+  if (v is List) {
+    return v.map((e) => hideNoteKeysWithPrefix(e, prefix: prefix)).toList();
+  }
+
+  return v;
+}
+
 dynamic _decodeAny(dynamic note) {
   if (note is String) {
     final s = note.trim();
