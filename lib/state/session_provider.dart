@@ -38,7 +38,13 @@ class SessionState extends ChangeNotifier {
   /// column is shown. The server already holds the two equal there: the catalog
   /// sync clears brand.native_customer_price and seeds
   /// selling_profit_percentage=1, so customer_price == dealer_price.
-  bool get hideDealerPrice => _hideDealerPrice || isEndUserWorkspace;
+  ///
+  /// Staff are exempt: they run the workspace and need their own cost and
+  /// dealer price. The API sends those to child staff, so collapsing the view
+  /// for everyone would blind the operator to figures it is deliberately
+  /// returning.
+  bool get hideDealerPrice =>
+      _hideDealerPrice || (isEndUserWorkspace && !isAdmin);
   bool get showDealerPrice => !hideDealerPrice;
   bool get isStaff => _isStaff;
   bool get isSuperuser => _isSuperuser;
