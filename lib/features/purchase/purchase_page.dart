@@ -1826,15 +1826,18 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
 
   /// Brand label shown on the purchase page.
   ///
-  /// Normal users see the clean brand name. Superusers see the alternate name
-  /// (`name_alt`), which carries the internal "*xx" marker stripped from the
-  /// clean name. Falls back to the clean name when `name_alt` is empty.
+  /// Normal users see the clean brand name. Superusers and staff see the
+  /// alternate name (`name_alt`), which carries the internal "*xx" marker
+  /// stripped from the clean name. Falls back to the clean name when
+  /// `name_alt` is empty.
   String _brandLabel(OnlinePurchaseOrderData data) {
     final clean = data.brand.cleanName.isNotEmpty
         ? data.brand.cleanName
         : data.brand.name;
 
-    if (!ref.read(sessionProvider).isSuperuser) return clean;
+    // isAdmin is staff-or-superuser, the same audience the view-only banner
+    // on this page addresses.
+    if (!ref.read(sessionProvider).isAdmin) return clean;
 
     final alt = data.brand.nameAlt.trim();
     return alt.isNotEmpty ? alt : clean;
