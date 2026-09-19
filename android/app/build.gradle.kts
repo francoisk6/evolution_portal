@@ -61,7 +61,13 @@ android {
         }
         create("dmp") {
             dimension = "workspace"
-            applicationIdSuffix = ".dmp"
+            // Standalone Play listing with its own id, not a suffix of the
+            // portal id. Fixed for the life of that listing once the first
+            // bundle is uploaded. The activity class stays under `namespace`
+            // (com.evolution_portal.MainActivity) - applicationId and
+            // namespace are independent, and the manifest merger writes the
+            // fully-qualified name into the merged manifest.
+            applicationId = "com.dmp_portal"
             resValue("string", "app_name", "DMP")
         }
     }

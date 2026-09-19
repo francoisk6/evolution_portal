@@ -95,7 +95,7 @@ the next build.
 | | Evolution | DMP |
 |---|---|---|
 | Flavor | `portal` | `dmp` |
-| applicationId | `com.evolution_portal` | `com.evolution_portal.dmp` |
+| applicationId | `com.evolution_portal` | `com.dmp_portal` |
 | App name | Evolution Portal | DMP |
 | API base | `https://api.evolution-portal.com` | `https://dmpapi.evolution-portal.com` |
 | Header logo | `assets/logo.png` | `assets/logos/dmp.png` |
