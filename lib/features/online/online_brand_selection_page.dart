@@ -81,6 +81,20 @@ class _OnlineBrandSelectionPageState
   // Currency used for the last customer-info request (so we can auto-refresh when it changes).
   String? _customerInfoCurrency;
 
+  // Monotonic token identifying the customer-info request whose answer is still
+  // wanted. Every lookup and every reset (tab switch, account change) bumps it;
+  // a response carrying an older token is DROPPED.
+  //
+  // Switching tabs clears _infoLoading but cannot cancel the HTTP call already
+  // in flight, so without this a slow lookup on one tab (an idm_bot/cyberia_bot
+  // route scrapes the dealer portal and can take tens of seconds) lands after
+  // the fast lookup on the tab now on screen and replaces its available_brands.
+  // The displayed brand then reads as "not eligible" and the alternates
+  // substitution silently swaps in its Moonet twin — same label, same price,
+  // different supplier. Seen in production: DMP tx 10 bought MOONET 3173
+  // instead of IDM_BOT 16415 after a SERVICES lookup landed on the DSL tab.
+  int _ciRequestToken = 0;
+
   // Backend tabs commonly use a stable "Direct Refill" id. If the caller did
   // not provide ?gsd, default to this to avoid an extra "no-gsd" request.
   static const int _defaultGsd = 1;
@@ -427,6 +441,9 @@ class _OnlineBrandSelectionPageState
   }
 
   void _resetCustomerInfo() {
+    // Orphan any lookup still in flight: its answer belongs to the tab/account
+    // being left behind and must not overwrite whatever comes next.
+    _ciRequestToken++;
     _customerInfo = null;
     _customerInfoError = null;
     _infoLoading = false;
@@ -463,6 +480,8 @@ class _OnlineBrandSelectionPageState
     }
     if (_infoLoading) return;
 
+    final int token = ++_ciRequestToken;
+
     _didFetchCustomerInfo = true;
     setState(() {
       _infoLoading = true;
@@ -485,6 +504,10 @@ class _OnlineBrandSelectionPageState
         currency: currency,
       );
       if (!mounted) return;
+      // Superseded by a newer lookup or by a tab/account reset — drop it.
+      // Nothing is touched here, including _infoLoading, which belongs to
+      // whichever request is current now.
+      if (token != _ciRequestToken) return;
 
       // Keep the successful lookup available for later steps (order page).
       if (resp.success == true) {
@@ -511,6 +534,8 @@ class _OnlineBrandSelectionPageState
       _persistBrandFlow();
     } catch (e) {
       if (!mounted) return;
+      // A stale failure must not wipe a good current result either.
+      if (token != _ciRequestToken) return;
 
       // Clear any previously cached customer-info on network/parse failures.
       ref.read(onlineCustomerInfoProvider.notifier).state = null;
