@@ -23,14 +23,20 @@ class MoneyFormat {
   }
 
   /// Round UP to next multiple of [step]. (E.g. 1270 with step 250 => 1500)
+  ///
+  /// "Up" is away from zero, so a negative amount mirrors its positive
+  /// (-1270 => -1500): a reconcile reversal must read as the exact opposite
+  /// of the row it cancels. The epsilon absorbs float noise, which otherwise
+  /// pushes exact values a step up (1.10 * 100 = 110.00000000000001 => 1.11).
   static num _ceilToStep(num value, num step) {
     if (step == 0) return value;
-    return (value / step).ceil() * step;
+    final magnitude = (value.abs() / step - 1e-9).ceil() * step;
+    return value < 0 ? -magnitude : magnitude;
   }
 
   static num roundLbp(num value) => _ceilToStep(value, 250);
 
-  static num roundUsd(num value) => (value * 100).ceil() / 100;
+  static num roundUsd(num value) => _ceilToStep(value * 100, 1) / 100;
 
   static String format(num value, {required String currencyCode}) {
     final code = currencyCode.trim().toUpperCase();
