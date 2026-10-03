@@ -2525,7 +2525,12 @@ class _TxGrid extends StatelessWidget {
         }
 
         Widget buildRow(BuildContext context, TransactionListItem e, int idx) {
-          final zebra = idx.isOdd ? const Color(0xFFF2F2F2) : Colors.white;
+          // Both rows of a reconciled pair are tinted the Reconciled blue.
+          final zebra = e.reconciliation != null
+              ? Colors.blue.shade50
+              : idx.isOdd
+                  ? const Color(0xFFF2F2F2)
+                  : Colors.white;
 
           // Render Status as an overlay so its background fills the full row height
           // without using CrossAxisAlignment.stretch (which breaks in ListView due to
@@ -2978,7 +2983,8 @@ class _TransactionCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: Card(
         elevation: 0,
-        color: Colors.white,
+        // Both rows of a reconciled pair are tinted the Reconciled blue.
+        color: item.reconciliation != null ? Colors.blue.shade50 : Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
           side: BorderSide(color: Colors.grey.shade300),
