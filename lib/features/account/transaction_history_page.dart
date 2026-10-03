@@ -547,7 +547,7 @@ class _TransactionHistoryPageState
       state.items.map((e) => e.status.trim()).where((e) => e.isNotEmpty),
     );
     if (statusSet.isEmpty) {
-      statusSet.addAll(const ['Done', 'Under process', 'Failed']);
+      statusSet.addAll(const ['Done', 'Under process', 'Failed', 'Reconciled']);
     }
     final statusOptions = statusSet.toList()..sort();
 
@@ -1135,9 +1135,57 @@ class _TransactionHistoryPageState
     }
   }
 
-  Future<void> _openDetail(TransactionListItem item) async {
+  /// Superuser: confirm, then cancel this Failed transaction with a negative
+  /// "Reconciled" row. Returns true when it was reconciled.
+  Future<bool> _confirmAndReconcile(
+      BuildContext ctx, TransactionDetail detail) async {
+    final ok = await showDialog<bool>(
+      context: ctx,
+      builder: (c) => AlertDialog(
+        title: Text('Reconcile #${detail.id}?'),
+        content: Text(
+          'Only reconcile after confirming there was no real purchase on the '
+          'provider.\n\n'
+          'A "Reconciled" row with negative amounts (dealer '
+          '-${detail.amounts.dealer} ${detail.currency}) is added next to this '
+          'one and refunds the balance. Both rows stay in the history.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(c).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(c).pop(true),
+            child: const Text('Reconcile'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return false;
+
     try {
-      final detail = await TransactionService.instance.detail(item.id);
+      final msg = await TransactionService.instance.reconcile(detail.id);
+      if (!mounted) return true;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      ref.read(transactionHistoryProvider.notifier).refresh();
+      return true;
+    } catch (e) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Reconcile failed: $e')));
+      return false;
+    }
+  }
+
+  Future<void> _openDetail(TransactionListItem item) =>
+      _openDetailById(item.id, item: item);
+
+  /// By id so the reconciliation link can jump straight to the other row of
+  /// the pair, wherever it is in the list.
+  Future<void> _openDetailById(int id, {TransactionListItem? item}) async {
+    try {
+      final detail = await TransactionService.instance.detail(id);
       if (!mounted) return;
 
       // ─────────────────────────────────────────────────────────────
@@ -1224,20 +1272,22 @@ class _TransactionHistoryPageState
       dynamic noteForUi = detail.note;
       final noteMap = tryParseNoteMap(noteForUi);
       final noteStatus = noteMap == null ? null : noteMap['status'];
-      final shouldCheckOrder = isNoteEmpty(noteForUi) ||
-          noteMap == null ||
-          !isDoneStatus(noteStatus);
+      // A reconciled pair is closed: nothing to ask the provider.
+      final shouldCheckOrder = detail.reconciliation == null &&
+          (isNoteEmpty(noteForUi) ||
+              noteMap == null ||
+              !isDoneStatus(noteStatus));
 
       if (shouldCheckOrder) {
         final orderNumber = normalizeOrderNumber(
             (detail.client.number.trim().isNotEmpty)
                 ? detail.client.number
-                : item.client.number);
+                : (item?.client.number ?? ''));
 
         final sectorName = (detail.context.sectorLabel.trim().isNotEmpty)
             ? detail.context.sectorLabel.trim()
-            : (item.context.sectorLabel.trim().isNotEmpty)
-                ? item.context.sectorLabel.trim()
+            : (item?.context.sectorLabel.trim().isNotEmpty ?? false)
+                ? item!.context.sectorLabel.trim()
                 : 'FlashVision';
 
         try {
@@ -1417,6 +1467,36 @@ class _TransactionHistoryPageState
                 const SizedBox(height: 8),
                 kv('Date', detail.ts.toLocal().toString()),
                 kv('Status', detail.status),
+                if (detail.reconciliation != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 120,
+                          child: Text('Reconciliation', style: labelStyle()),
+                        ),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              _openDetailById(detail.reconciliation!.pairId);
+                            },
+                            child: Text(
+                              detail.reconciliation!.label,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Theme.of(ctx).colorScheme.primary,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 kv('Client', '${detail.client.name} (${detail.client.number})'),
                 kv('Brand', detail.context.brandLabel),
                 const Divider(height: 24),
@@ -1533,6 +1613,15 @@ class _TransactionHistoryPageState
                     },
                     icon: Icons.print,
                     label: 'Print',
+                  ),
+                if (detail.canReconcile)
+                  actionBtn(
+                    onPressed: () async {
+                      final done = await _confirmAndReconcile(ctx, detail);
+                      if (done && ctx.mounted) Navigator.of(ctx).pop();
+                    },
+                    icon: Icons.undo,
+                    label: 'Reconcile',
                   ),
                 actionBtn(
                   onPressed: () => Navigator.of(ctx).pop(),
@@ -2172,7 +2261,10 @@ class _TxGrid extends StatelessWidget {
         label: 'Id',
         width: 50,
         align: TextAlign.left,
-        cell: (e) => '#${e.id}',
+        // Second line: the other row of a reconciled pair.
+        cell: (e) => e.reconciliation == null
+            ? '#${e.id}'
+            : '#${e.id}\n↔${e.reconciliation!.pairId}',
       ),
       if (hasUser)
         _TxGridCol(
@@ -2499,6 +2591,8 @@ class _TxGrid extends StatelessWidget {
                 s == 'accept' ||
                 s == 'accepted') {
               statusColor = Colors.green;
+            } else if (s == 'reconciled') {
+              statusColor = Colors.blue;
             } else if (s.contains('fail') || s.contains('error')) {
               statusColor = Colors.red;
             } else if (s.contains('not') && s.contains('paid')) {
@@ -2792,6 +2886,7 @@ class _TransactionCard extends StatelessWidget {
     if (s == 'active' || s == 'done' || s == 'accept' || s == 'accepted') {
       return Colors.green;
     }
+    if (s == 'reconciled') return Colors.blue;
     if (s.contains('fail') || s.contains('error')) return Colors.red;
     if (s.contains('not') && s.contains('paid')) return Colors.orange;
     return Colors.orange; // default non-done
@@ -2852,6 +2947,16 @@ class _TransactionCard extends StatelessWidget {
           ),
         const SizedBox(height: 6),
         Text(dateStr, style: TextStyle(color: fgSoft)),
+        if (item.reconciliation != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            item.reconciliation!.label,
+            style: TextStyle(
+              color: Colors.blue.shade700,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ],
     );
 

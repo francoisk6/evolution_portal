@@ -514,6 +514,34 @@ class TxUi {
   }
 }
 
+/// Link between a Failed transaction and the "Reconciled" row cancelling it.
+/// Same shape on both rows; null when the row is not part of a pair.
+class TxReconciliation {
+  /// "original" (this Failed row was cancelled) or "reversal" (this row cancels).
+  final String role;
+  final int pairId;
+  final DateTime? at;
+
+  const TxReconciliation({required this.role, required this.pairId, this.at});
+
+  bool get isReversal => role == 'reversal';
+
+  /// "Reconciled by #123" on the Failed row, "Reverses #100" on the reversal.
+  String get label => isReversal ? 'Reverses #$pairId' : 'Reconciled by #$pairId';
+
+  static TxReconciliation? fromJsonOrNull(dynamic v) {
+    final m = _asMap(v);
+    final pairId = _asIntOrNull(m['pair_id']);
+    if (pairId == null) return null;
+    final at = _asCleanString(m['at']);
+    return TxReconciliation(
+      role: (m['role'] ?? '').toString(),
+      pairId: pairId,
+      at: at == null ? null : DateTime.tryParse(at),
+    );
+  }
+}
+
 class TransactionListItem {
   final int id;
   final DateTime ts;
@@ -526,6 +554,7 @@ class TransactionListItem {
   final TxContext context;
   final Map<String, String>? balance;
   final TxUi? ui;
+  final TxReconciliation? reconciliation;
 
   const TransactionListItem({
     required this.id,
@@ -539,6 +568,7 @@ class TransactionListItem {
     required this.context,
     required this.balance,
     required this.ui,
+    this.reconciliation,
   });
 
   static DateTime _parseTs(dynamic v) {
@@ -594,6 +624,7 @@ class TransactionListItem {
       context: TxContext.fromJson(_asMap(m['context'])),
       balance: _parseBalance(m['balance'], currencyHint: cur),
       ui: uiMap.isEmpty ? null : TxUi.fromJson(uiMap),
+      reconciliation: TxReconciliation.fromJsonOrNull(m['reconciliation']),
     );
   }
 }
@@ -655,6 +686,11 @@ class TransactionDetail {
   final TxContext context;
   final dynamic note;
   final Map<String, String>? balance;
+  final TxReconciliation? reconciliation;
+
+  /// Computed by the server (superuser, main workspace, Failed, not yet
+  /// reconciled); false from a backend that does not send it.
+  final bool canReconcile;
 
   const TransactionDetail({
     required this.id,
@@ -670,6 +706,8 @@ class TransactionDetail {
     required this.context,
     required this.note,
     required this.balance,
+    this.reconciliation,
+    this.canReconcile = false,
   });
 
   static DateTime _parseTs(dynamic v) {
@@ -697,6 +735,8 @@ class TransactionDetail {
       context: TxContext.fromJson(_asMap(m['context'])),
       note: m['note'],
       balance: TransactionListItem._parseBalance(m['balance'], currencyHint: cur),
+      reconciliation: TxReconciliation.fromJsonOrNull(m['reconciliation']),
+      canReconcile: _asBoolOrNull(m['can_reconcile']) ?? false,
     );
   }
 }

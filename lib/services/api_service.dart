@@ -1793,6 +1793,13 @@ class ApiService {
     return _getJsonMap(url, auth: true);
   }
 
+  /// Superuser only: cancel a Failed transaction with a negative "Reconciled"
+  /// row instead of deleting it. Throws with the server's reason when refused.
+  Future<Map<String, dynamic>> postTransactionReconcile({required int id}) async {
+    final url = Uri.parse('${AppEnv.base}account/transactions/$id/reconcile/');
+    return _sendJsonMap(url, method: 'POST', auth: true);
+  }
+
   /// Export filtered transactions to Excel.
   ///
   /// Tries a few common endpoint shapes to tolerate backend route differences.

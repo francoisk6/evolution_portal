@@ -52,6 +52,12 @@ class TransactionService {
     return TransactionDetail.fromJson(m);
   }
 
+  /// Returns the server message, e.g. "Transaction #100 reconciled by #123.".
+  Future<String> reconcile(int id) async {
+    final m = await ApiService.instance.postTransactionReconcile(id: id);
+    return (m['message'] ?? 'Reconciled').toString();
+  }
+
 
   Future<DownloadedFile> exportExcel({
     String? dateFrom,
