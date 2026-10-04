@@ -63,11 +63,10 @@ normal for a sideloaded build.
 ## 3. Build the app bundle (Play Store)
 
 ```bash
-flutter build appbundle --release --flavor portal          # Evolution
-flutter build appbundle --release --flavor dmp \           # DMP
-  --dart-define=WORKSPACE_SLUG=dmp \
-  --dart-define=WORKSPACE_NAME=DMP \
-  --dart-define=API_BASE_URL=https://dmpapi.evolution-portal.com
+# Evolution
+flutter build appbundle --release --flavor portal          
+# DMP
+flutter build appbundle --release --flavor dmp --dart-define=WORKSPACE_SLUG=dmp --dart-define=WORKSPACE_NAME=DMP --dart-define=API_BASE_URL=https://dmpapi.evolution-portal.com
 ```
 
 Remember `--flavor` is now **mandatory** — a bare `flutter build appbundle` runs
