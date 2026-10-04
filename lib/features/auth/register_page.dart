@@ -19,6 +19,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _lastCtl = TextEditingController();
   bool _busy = false;
   String? _error;
+  String? _notice;
 
   @override
   void dispose() {
@@ -36,9 +37,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     setState(() {
       _busy = true;
       _error = null;
+      _notice = null;
     });
     try {
-      await AuthService.instance.register(
+      final data = await AuthService.instance.register(
         username: _usernameCtl.text.trim(),
         email: _emailCtl.text.trim(),
         password: _passCtl.text,
@@ -47,7 +49,16 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         lastName: _lastCtl.text.trim().isEmpty ? null : _lastCtl.text.trim(),
       );
       if (!mounted) return; // <- important guard
-      await ref.read(sessionProvider).setLoggedIn(true);
+      // Self-signup accounts start inactive and the API rejects their token
+      // until an admin activates them, so don't enter the app on it.
+      if (data['is_active'] == false) {
+        await AuthService.instance.logout();
+        if (!mounted) return;
+        setState(() => _notice =
+            'Account created. You can sign in once it is activated.');
+        return;
+      }
+      await ref.read(sessionProvider).afterLogin(data);
     } catch (e) {
       setState(() {
         _error = e.toString();
@@ -71,6 +82,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         const SizedBox(height: 16),
         if (_error != null) ...[
           Text(_error!, style: const TextStyle(color: Colors.red)),
+          const SizedBox(height: 8),
+        ],
+        if (_notice != null) ...[
+          Text(_notice!),
           const SizedBox(height: 8),
         ],
         Form(

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/auth_service.dart';
+
 class SessionState extends ChangeNotifier {
   bool _ready = false;
   bool _loggedIn = false;
@@ -108,6 +110,23 @@ class SessionState extends ChangeNotifier {
     } finally {
       _ready = true;
       notifyListeners();
+    }
+    if (_loggedIn) _refreshFromServer();
+  }
+
+  /// Re-read /me on start so profile flags an admin changed (PIN on order,
+  /// hide dealer price, workspace tiers) apply without a re-login. A 401 is
+  /// left to getMe(), which already drops the stale token.
+  Future<void> _refreshFromServer() async {
+    try {
+      final me = await AuthService.instance.me();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_json', jsonEncode(me));
+      _applyUserFlags(_extractData(me));
+      notifyListeners();
+    } catch (_) {
+      // Offline, server error or disposed by a scope reset: keep the
+      // persisted flags.
     }
   }
 
