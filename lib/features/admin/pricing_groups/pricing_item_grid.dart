@@ -289,6 +289,26 @@ _Resolved _resolve(PricingDraftBook book, _GridRow row) {
   );
 }
 
+bool _isRow(PricingGroupItem i) => i.id != null || i.productIds.isNotEmpty;
+
+_GridRow _gridRowFrom(PricingDraftBook book, PricingItemKind kind, PricingGroupItem item) {
+  final ids = kind == PricingItemKind.product && item.productIds.isNotEmpty
+      ? item.productIds
+      : <int>[if (item.id != null) item.id!];
+  for (final id in ids) {
+    book.rememberRow(kind, id, item.label, item.subtitle,
+        categoryId: item.categoryId, productId: item.productId);
+  }
+  return _GridRow(
+    kind: kind,
+    ids: ids,
+    label: item.label,
+    subtitle: item.subtitle,
+    categoryId: item.categoryId,
+    productId: item.productId,
+  );
+}
+
 // ───────────────────────── grid ─────────────────────────
 
 enum _Show { all, inGroup, changed }
@@ -356,23 +376,7 @@ class _PricingItemGridState extends State<PricingItemGrid> {
 
   String get _search => _searchCtl.text.trim();
 
-  _GridRow _fromCatalog(PricingGroupItem item) {
-    final ids = _kind == PricingItemKind.product && item.productIds.isNotEmpty
-        ? item.productIds
-        : <int>[if (item.id != null) item.id!];
-    for (final id in ids) {
-      widget.book.rememberRow(_kind, id, item.label, item.subtitle,
-          categoryId: item.categoryId, productId: item.productId);
-    }
-    return _GridRow(
-      kind: _kind,
-      ids: ids,
-      label: item.label,
-      subtitle: item.subtitle,
-      categoryId: item.categoryId,
-      productId: item.productId,
-    );
-  }
+  _GridRow _fromCatalog(PricingGroupItem item) => _gridRowFrom(widget.book, _kind, item);
 
   Future<void> _reload() async {
     _catalog.clear();
@@ -399,7 +403,7 @@ class _PricingItemGridState extends State<PricingItemGrid> {
       );
       if (!mounted || token != _token) return;
       setState(() {
-        _catalog.addAll(page.items.where((i) => i.id != null || i.productIds.isNotEmpty).map(_fromCatalog));
+        _catalog.addAll(page.items.where(_isRow).map(_fromCatalog));
         _total = page.total;
       });
     } catch (e) {
@@ -445,7 +449,7 @@ class _PricingItemGridState extends State<PricingItemGrid> {
     if (_catalog.length >= _total) return List<_GridRow>.from(_catalog);
     try {
       final page = await PricingGroupService.instance.options(kind: _kind, search: _search, all: true);
-      final rows = page.items.where((i) => i.id != null || i.productIds.isNotEmpty).map(_fromCatalog).toList();
+      final rows = page.items.where(_isRow).map(_fromCatalog).toList();
       if (page.total > rows.length && mounted) {
         showPricingSnack(context,
             'Only the first ${rows.length} of ${page.total} matches were changed - narrow the search for the rest.');
@@ -629,11 +633,11 @@ class _PricingItemGridState extends State<PricingItemGrid> {
             ),
           ),
         for (final r in rows)
-          _ItemRow(
+          _ExpandableItem(
             key: ValueKey(r.key),
             row: r,
             book: book,
-            editable: widget.editable && r.editable,
+            editable: widget.editable,
           ),
         if (_show == _Show.all && _catalog.length < _total)
           Padding(
@@ -653,6 +657,133 @@ class _PricingItemGridState extends State<PricingItemGrid> {
   }
 }
 
+// ───────────────────────── drill-down ─────────────────────────
+
+/// A row that opens its children when tapped: a category shows its products,
+/// a product shows its brands. Children are rows like any other.
+class _ExpandableItem extends StatefulWidget {
+  final _GridRow row;
+  final PricingDraftBook book;
+  final bool editable;
+
+  const _ExpandableItem({super.key, required this.row, required this.book, required this.editable});
+
+  @override
+  State<_ExpandableItem> createState() => _ExpandableItemState();
+}
+
+class _ExpandableItemState extends State<_ExpandableItem> {
+  static const _pageSize = 50;
+
+  bool _open = false;
+  final List<_GridRow> _children = [];
+  int _total = 0;
+  bool _loading = false;
+  bool _loaded = false;
+  String? _error;
+
+  PricingItemKind? get _childKind => switch (widget.row.kind) {
+        PricingItemKind.category => PricingItemKind.product,
+        PricingItemKind.product => PricingItemKind.brand,
+        PricingItemKind.brand => null,
+      };
+
+  void _toggle() {
+    setState(() => _open = !_open);
+    if (_open && !_loaded) _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    final kind = _childKind;
+    if (kind == null) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final r = widget.row;
+      final page = await PricingGroupService.instance.options(
+        kind: kind,
+        limit: _pageSize,
+        offset: _children.length,
+        categoryId: r.kind == PricingItemKind.category ? r.ids.first : null,
+        productIds: r.kind == PricingItemKind.product ? r.ids : null,
+      );
+      if (!mounted) return;
+      setState(() {
+        _children.addAll(page.items.where(_isRow).map((i) => _gridRowFrom(widget.book, kind, i)));
+        _total = page.total;
+        _loaded = true;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = friendlyPricingError(e));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = widget.row;
+    final childKind = _childKind;
+    final grey = Colors.grey.shade600;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ItemRow(
+          row: r,
+          book: widget.book,
+          editable: widget.editable && r.editable,
+          expanded: childKind == null ? null : _open,
+          onToggle: childKind == null ? null : _toggle,
+        ),
+        if (_open && childKind != null)
+          Container(
+            margin: const EdgeInsets.only(left: 14, bottom: 6),
+            padding: const EdgeInsets.only(left: 10),
+            decoration: BoxDecoration(
+              border: Border(left: BorderSide(color: Colors.grey.shade300, width: 2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_loading && _children.isEmpty) const LinearProgressIndicator(minHeight: 2),
+                if (_error != null)
+                  ListTile(
+                    dense: true,
+                    title: Text(_error!, style: const TextStyle(color: Color(0xFFB91C1C))),
+                    trailing: TextButton(onPressed: _loadMore, child: const Text('Retry')),
+                  ),
+                if (_loaded && _children.isEmpty && _error == null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text('No active ${childKind.title.toLowerCase()} inside.',
+                        style: TextStyle(fontSize: 12.5, color: grey)),
+                  ),
+                for (final c in _children)
+                  _ExpandableItem(
+                    key: ValueKey(c.key),
+                    row: c,
+                    book: widget.book,
+                    editable: widget.editable,
+                  ),
+                if (_children.length < _total)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: _loading ? null : _loadMore,
+                      icon: const Icon(Icons.expand_more, size: 18),
+                      label: Text('Show more (${_children.length} of $_total)'),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 // ───────────────────────── one row ─────────────────────────
 
 class _ItemRow extends StatefulWidget {
@@ -660,7 +791,17 @@ class _ItemRow extends StatefulWidget {
   final PricingDraftBook book;
   final bool editable;
 
-  const _ItemRow({super.key, required this.row, required this.book, required this.editable});
+  /// null = no children (brand); otherwise whether the children are shown.
+  final bool? expanded;
+  final VoidCallback? onToggle;
+
+  const _ItemRow({
+    required this.row,
+    required this.book,
+    required this.editable,
+    this.expanded,
+    this.onToggle,
+  });
 
   @override
   State<_ItemRow> createState() => _ItemRowState();
@@ -790,7 +931,7 @@ class _ItemRowState extends State<_ItemRow> {
       ],
     );
 
-    final title = Column(
+    final texts = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(r.label, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5)),
@@ -800,6 +941,26 @@ class _ItemRowState extends State<_ItemRow> {
           Text('${r.ids.length} products', style: TextStyle(fontSize: 11.5, color: grey)),
       ],
     );
+    final expanded = widget.expanded;
+    final title = expanded == null
+        ? texts
+        : InkWell(
+            onTap: widget.onToggle,
+            borderRadius: BorderRadius.circular(6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Tooltip(
+                  message: expanded
+                      ? 'Hide'
+                      : 'Show its ${r.kind == PricingItemKind.category ? 'products' : 'brands'}',
+                  child: Icon(expanded ? Icons.expand_more : Icons.chevron_right, size: 20),
+                ),
+                const SizedBox(width: 4),
+                Expanded(child: texts),
+              ],
+            ),
+          );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),

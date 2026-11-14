@@ -2214,11 +2214,15 @@ class ApiService {
     int limit = 50,
     int offset = 0,
     bool all = false,
+    int? categoryId,
+    List<int>? productIds,
   }) {
     final qp = <String, String>{
       'kind': kind,
       if (all) 'all': '1' else 'limit': '$limit',
       if (offset > 0) 'offset': '$offset',
+      if (categoryId != null) 'category_id': '$categoryId',
+      if (productIds != null && productIds.isNotEmpty) 'product_ids': productIds.join(','),
       if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
       if (withinGroup != null) 'within_group': '$withinGroup',
     };

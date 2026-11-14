@@ -59,6 +59,8 @@ class PricingGroupService {
     bool all = false,
     int limit = 50,
     int offset = 0,
+    int? categoryId,
+    List<int>? productIds,
   }) async {
     final m = await _api.getPricingGroupOptions(
       kind: kind.apiName,
@@ -67,6 +69,8 @@ class PricingGroupService {
       all: all,
       limit: limit,
       offset: offset,
+      categoryId: categoryId,
+      productIds: productIds,
     );
     return PricingOptions.fromJson(m);
   }
