@@ -59,7 +59,7 @@ Future<bool> confirmPricingPreview(
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
-                    '${preview.prunedCount} item(s) are already covered by a parent and will be removed.',
+                    '${preview.prunedCount} item(s) will be removed: excluded, but not inside anything in the group.',
                     style: const TextStyle(fontSize: 12.5, color: Color(0xFF92400E)),
                   ),
                 ),

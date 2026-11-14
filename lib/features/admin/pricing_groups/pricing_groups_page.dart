@@ -6,6 +6,7 @@ import '../../../services/pricing_group_service.dart';
 import '../../../state/session_provider.dart';
 import 'dealer_pricing_groups_page.dart';
 import 'pricing_group_widgets.dart';
+import 'pricing_item_grid.dart';
 
 /// Admin › Pricing groups: list + editor.
 class PricingGroupsPage extends ConsumerStatefulWidget {
@@ -103,7 +104,7 @@ class _PricingGroupsPageState extends ConsumerState<PricingGroupsPage> {
               ),
               const SizedBox(height: 4),
               Text(
-                'A group holds categories, products and brands with one dealer % and one selling %. '
+                'A group holds categories, products and brands, each with its own dealer % and selling %. '
                 'Turn it on for a dealer and those percentages are applied to the dealer\'s brands.',
                 style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
               ),
@@ -182,13 +183,8 @@ class _GroupCard extends StatelessWidget {
                       spacing: 6,
                       runSpacing: 6,
                       children: [
-                        PricingInfoChip('Dealer ${group.profitPercentage ?? 'keep'}',
-                            color: const Color(0xFF1E7E34)),
-                        PricingInfoChip('Selling ${group.sellingProfitPercentage ?? 'keep'}',
-                            color: const Color(0xFF1E7E34)),
-                        PricingInfoChip(
-                            '${c.categories} cat · ${c.products} prod · ${c.brands} brand',
-                            icon: Icons.category_outlined),
+                        PricingInfoChip(group.percentLabel, color: const Color(0xFF1E7E34)),
+                        PricingInfoChip(c.itemsLabel, icon: Icons.category_outlined),
                         PricingInfoChip('${c.membersActive} active / ${c.membersTotal} members',
                             icon: Icons.people_outline,
                             color: const Color(0xFF2563EB)),
@@ -226,15 +222,11 @@ class PricingGroupEditorPage extends StatefulWidget {
 
 class _PricingGroupEditorPageState extends State<PricingGroupEditorPage> {
   final _nameCtl = TextEditingController();
-  final _dealerCtl = TextEditingController();
-  final _sellingCtl = TextEditingController();
   final _noteCtl = TextEditingController();
+  final _book = PricingDraftBook();
 
   int? _groupId;
   PricingGroupDetail? _detail;
-  final Map<PricingItemKind, List<PricingGroupItem>> _items = {
-    for (final k in PricingItemKind.values) k: <PricingGroupItem>[],
-  };
   bool _loading = false;
   bool _busy = false;
   bool _dirty = false;
@@ -245,17 +237,25 @@ class _PricingGroupEditorPageState extends State<PricingGroupEditorPage> {
   void initState() {
     super.initState();
     _groupId = widget.groupId;
+    _book.addListener(_onBook);
     if (_groupId != null) WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   @override
   void dispose() {
+    _book.removeListener(_onBook);
+    _book.dispose();
     _nameCtl.dispose();
-    _dealerCtl.dispose();
-    _sellingCtl.dispose();
     _noteCtl.dispose();
     super.dispose();
   }
+
+  void _onBook() {
+    final dirty = _book.isDirty || _fieldsDirty;
+    if (dirty != _dirty && mounted) setState(() => _dirty = dirty);
+  }
+
+  bool _fieldsDirty = false;
 
   List<PricingItemKind> get _kinds => [
         if (widget.canUseCategories) PricingItemKind.category,
@@ -276,13 +276,9 @@ class _PricingGroupEditorPageState extends State<PricingGroupEditorPage> {
       setState(() {
         _detail = d;
         _nameCtl.text = d.group.name;
-        _dealerCtl.text = d.group.profitPercentage ?? '';
-        _sellingCtl.text = d.group.sellingProfitPercentage ?? '';
         _noteCtl.text = d.group.note;
-        final items = d.group.items ?? const PricingGroupItems();
-        for (final k in PricingItemKind.values) {
-          _items[k] = List<PricingGroupItem>.from(items.of(k));
-        }
+        _book.load(d.group.items?.entries ?? const <PricingGroupEntry>[]);
+        _fieldsDirty = false;
         _dirty = false;
       });
     } catch (e) {
@@ -294,31 +290,21 @@ class _PricingGroupEditorPageState extends State<PricingGroupEditorPage> {
   }
 
   void _markDirty() {
+    _fieldsDirty = true;
     if (!_dirty) setState(() => _dirty = true);
   }
 
   String? _validate() {
     if (_nameCtl.text.trim().isEmpty) return 'Enter a group name.';
-    for (final ctl in [_dealerCtl, _sellingCtl]) {
-      final s = ctl.text.trim();
-      if (s.isEmpty) continue;
-      final v = double.tryParse(s);
-      if (v == null || v <= 0) return 'Percentages are multipliers like 1.05 (or blank to keep).';
-    }
-    return null;
+    return _book.validate();
   }
 
   Future<PricingSaveResult> _send({required bool dryRun}) {
     return PricingGroupService.instance.save(
       id: _groupId,
       name: _nameCtl.text,
-      profitPercentage: _dealerCtl.text,
-      sellingProfitPercentage: _sellingCtl.text,
       note: _noteCtl.text,
-      categoryIds: pricingIdsOf(_items[PricingItemKind.category]!, PricingItemKind.category),
-      productIds: pricingIdsOf(_items[PricingItemKind.product]!, PricingItemKind.product),
-      brandIds: pricingIdsOf(_items[PricingItemKind.brand]!, PricingItemKind.brand),
-      includeCategories: widget.canUseCategories,
+      items: _book.toJson(),
       dryRun: dryRun,
     );
   }
@@ -352,19 +338,6 @@ class _PricingGroupEditorPageState extends State<PricingGroupEditorPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  Future<void> _addItems(PricingItemKind kind) async {
-    final picked = await pickPricingItems(
-      context,
-      kind: kind,
-      alreadySelectedKeys: _items[kind]!.map((e) => e.key).toSet(),
-    );
-    if (picked == null || picked.isEmpty) return;
-    setState(() {
-      _items[kind]!.addAll(picked);
-      _dirty = true;
-    });
   }
 
   Future<void> _reapply() async {
@@ -534,21 +507,6 @@ class _PricingGroupEditorPageState extends State<PricingGroupEditorPage> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(child: _pctField('Dealer %', _dealerCtl, editable)),
-                        const SizedBox(width: 12),
-                        Expanded(child: _pctField('Selling %', _sellingCtl, editable)),
-                      ],
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(4, 6, 4, 12),
-                      child: Text(
-                        'Multipliers: 1.05 = +5%. Leave one blank to keep that value on rows that already exist '
-                        '(new rows then use the standard percentage).',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                      ),
-                    ),
                     TextField(
                       controller: _noteCtl,
                       enabled: editable,
@@ -560,37 +518,21 @@ class _PricingGroupEditorPageState extends State<PricingGroupEditorPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Text('What the group covers',
+                    Text('Items & percentages',
                         style: Theme.of(context)
                             .textTheme
                             .titleMedium
                             ?.copyWith(fontWeight: FontWeight.w800)),
                     Padding(
-                      padding: const EdgeInsets.only(top: 2, bottom: 8),
+                      padding: const EdgeInsets.only(top: 2, bottom: 10),
                       child: Text(
-                        'Parent wins: a product inside a listed category, or a brand inside a listed product, '
-                        'is removed automatically on save.',
+                        'Multipliers: 1.05 = +5%. Blank all the way up = keep the dealer\'s current value '
+                        '(new rows then use the standard percentage).',
                         style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                       ),
                     ),
-                    for (final kind in _kinds)
-                      PricingItemSection(
-                        title: kind.title,
-                        items: _items[kind]!,
-                        onAdd: editable ? () => _addItems(kind) : null,
-                        onRemove: editable
-                            ? (item) => setState(() {
-                                  _items[kind]!.remove(item);
-                                  _dirty = true;
-                                })
-                            : null,
-                        onRemoveAll: editable
-                            ? () => setState(() {
-                                  _items[kind]!.clear();
-                                  _dirty = true;
-                                })
-                            : null,
-                      ),
+                    if (_groupId == null || d != null)
+                      PricingItemGrid(book: _book, kinds: _kinds, editable: editable),
                     if ((d?.group.items?.hiddenItemCount ?? 0) > 0)
                       Text(
                         '${d!.group.items!.hiddenItemCount} item(s) added by a superuser are not shown to you; '
@@ -604,20 +546,6 @@ class _PricingGroupEditorPageState extends State<PricingGroupEditorPage> {
                   ],
                 ),
               ),
-      ),
-    );
-  }
-
-  Widget _pctField(String label, TextEditingController ctl, bool enabled) {
-    return TextField(
-      controller: ctl,
-      enabled: enabled,
-      onChanged: (_) => _markDirty(),
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: 'blank = keep',
-        border: const OutlineInputBorder(),
       ),
     );
   }

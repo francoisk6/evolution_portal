@@ -1,11 +1,15 @@
 // Models for the pricing-group admin API (/api/online/pricing-groups/...).
 //
-// A pricing group = categories / products / brands + dealer % + selling %.
-// Turning a group on for a dealer writes those % into the dealer's
-// user-x-brand rows. Percentages are multipliers ("1.05" = +5%); a null
-// percentage means "leave that value alone on existing rows".
+// A pricing group = categories / products / brands, each with its own
+// dealer % and selling % (or excluded). The most specific item wins: brand,
+// then product, then category. Turning a group on for a dealer writes the
+// resulting % into the dealer's user-x-brand rows. Percentages are
+// multipliers ("1.05" = +5%); a blank % is taken from the item above it, and
+// blank all the way up means "leave that value alone on existing rows".
 
 int _asInt(dynamic v) => v is num ? v.toInt() : int.tryParse('${v ?? ''}') ?? 0;
+
+int? _asIntOrNull(dynamic v) => v == null ? null : (v is num ? v.toInt() : int.tryParse('$v'));
 
 bool _asBool(dynamic v) {
   if (v is bool) return v;
@@ -39,12 +43,18 @@ class PricingGroupItem {
   final String subtitle;
   final List<int> productIds;
 
+  /// Parents, for showing inherited percentages (catalog rows only).
+  final int? categoryId;
+  final int? productId;
+
   const PricingGroupItem({
     required this.id,
     required this.key,
     required this.label,
     required this.subtitle,
     this.productIds = const <int>[],
+    this.categoryId,
+    this.productId,
   });
 
   factory PricingGroupItem.fromJson(Map<String, dynamic> j) {
@@ -58,6 +68,8 @@ class PricingGroupItem {
       label: j['label']?.toString() ?? '',
       subtitle: j['subtitle']?.toString() ?? '',
       productIds: ids,
+      categoryId: _asIntOrNull(j['category_id']),
+      productId: _asIntOrNull(j['product_id']),
     );
   }
 
@@ -74,6 +86,8 @@ class PricingOptions {
   final int total;
 
   const PricingOptions({required this.items, required this.total});
+
+  bool get isEmpty => items.isEmpty;
 
   factory PricingOptions.fromJson(Map<String, dynamic> j) {
     final items = _asMapList(j['options']).map(PricingGroupItem.fromJson).toList();
@@ -99,17 +113,72 @@ extension PricingItemKindX on PricingItemKind {
       };
 }
 
+PricingItemKind? pricingKindFromApi(String? v) => switch (v) {
+      'category' => PricingItemKind.category,
+      'product' => PricingItemKind.product,
+      'brand' => PricingItemKind.brand,
+      _ => null,
+    };
+
+/// One item of a group with its own settings (per-item grid).
+class PricingGroupEntry {
+  final PricingItemKind kind;
+  final int id;
+  final String label;
+  final String subtitle;
+  final int? categoryId;
+  final int? productId;
+  final bool excluded;
+  final String? profitPercentage;
+  final String? sellingProfitPercentage;
+  final bool editable;
+
+  const PricingGroupEntry({
+    required this.kind,
+    required this.id,
+    required this.label,
+    required this.subtitle,
+    this.categoryId,
+    this.productId,
+    this.excluded = false,
+    this.profitPercentage,
+    this.sellingProfitPercentage,
+    this.editable = true,
+  });
+
+  static PricingGroupEntry? fromJson(Map<String, dynamic> j) {
+    final kind = pricingKindFromApi(j['kind']?.toString());
+    if (kind == null || j['id'] == null) return null;
+    return PricingGroupEntry(
+      kind: kind,
+      id: _asInt(j['id']),
+      label: j['label']?.toString() ?? '',
+      subtitle: j['subtitle']?.toString() ?? '',
+      categoryId: _asIntOrNull(j['category_id']),
+      productId: _asIntOrNull(j['product_id']),
+      excluded: _asBool(j['excluded']),
+      profitPercentage: _asStrOrNull(j['profit_percentage']),
+      sellingProfitPercentage: _asStrOrNull(j['selling_profit_percentage']),
+      editable: j.containsKey('editable') ? _asBool(j['editable']) : true,
+    );
+  }
+}
+
 class PricingGroupItems {
   final List<PricingGroupItem> categories;
   final List<PricingGroupItem> products;
   final List<PricingGroupItem> brands;
   final int hiddenItemCount;
 
+  /// Every item with its own % (null on servers without per-item %).
+  final List<PricingGroupEntry>? entries;
+
   const PricingGroupItems({
     this.categories = const <PricingGroupItem>[],
     this.products = const <PricingGroupItem>[],
     this.brands = const <PricingGroupItem>[],
     this.hiddenItemCount = 0,
+    this.entries,
   });
 
   factory PricingGroupItems.fromJson(Map<String, dynamic> j) {
@@ -119,7 +188,15 @@ class PricingGroupItems {
       categories: list('categories'),
       products: list('products'),
       brands: list('brands'),
-      hiddenItemCount: _asInt(j['hidden_item_count']),
+      hiddenItemCount: j.containsKey('hidden_entry_count')
+          ? _asInt(j['hidden_entry_count'])
+          : _asInt(j['hidden_item_count']),
+      entries: j['entries'] is List
+          ? _asMapList(j['entries'])
+              .map(PricingGroupEntry.fromJson)
+              .whereType<PricingGroupEntry>()
+              .toList()
+          : null,
     );
   }
 
@@ -136,6 +213,7 @@ class PricingGroupCounts {
   final int categories;
   final int products;
   final int brands;
+  final int excluded;
   final int membersActive;
   final int membersTotal;
 
@@ -143,14 +221,19 @@ class PricingGroupCounts {
     this.categories = 0,
     this.products = 0,
     this.brands = 0,
+    this.excluded = 0,
     this.membersActive = 0,
     this.membersTotal = 0,
   });
+
+  String get itemsLabel => '$categories cat · $products prod · $brands brand'
+      '${excluded > 0 ? ' · $excluded excluded' : ''}';
 
   factory PricingGroupCounts.fromJson(Map<String, dynamic> j) => PricingGroupCounts(
         categories: _asInt(j['categories']),
         products: _asInt(j['products']),
         brands: _asInt(j['brands']),
+        excluded: _asInt(j['excluded']),
         membersActive: _asInt(j['members_active']),
         membersTotal: _asInt(j['members_total']),
       );
@@ -185,8 +268,12 @@ class PricingGroup {
         items: j['items'] == null ? null : PricingGroupItems.fromJson(_asMap(j['items'])),
       );
 
-  String get percentLabel =>
-      'Dealer ${profitPercentage ?? 'keep'} · Selling ${sellingProfitPercentage ?? 'keep'}';
+  /// Every item shares one %: show it; otherwise the % is set per item.
+  bool get hasSinglePercent => profitPercentage != null || sellingProfitPercentage != null;
+
+  String get percentLabel => hasSinglePercent
+      ? 'Dealer ${profitPercentage ?? 'per item'} · Selling ${sellingProfitPercentage ?? 'per item'}'
+      : 'Percentages per item';
 }
 
 /// Result counts of an apply run or a preview.

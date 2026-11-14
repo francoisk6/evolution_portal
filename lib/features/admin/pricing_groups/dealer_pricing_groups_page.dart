@@ -354,10 +354,7 @@ class _DealerPricingGroupsPageState extends State<DealerPricingGroupsPage> {
               spacing: 6,
               runSpacing: 6,
               children: [
-                PricingInfoChip('Dealer ${link.group.profitPercentage ?? 'keep'}',
-                    color: const Color(0xFF1E7E34)),
-                PricingInfoChip('Selling ${link.group.sellingProfitPercentage ?? 'keep'}',
-                    color: const Color(0xFF1E7E34)),
+                PricingInfoChip(link.group.percentLabel, color: const Color(0xFF1E7E34)),
                 PricingInfoChip('${link.scopeCount} brand(s)', icon: Icons.sell_outlined),
                 if (on) PricingInfoChip('${link.managedRows} managed', color: const Color(0xFF2563EB)),
               ],
