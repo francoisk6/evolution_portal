@@ -2163,6 +2163,93 @@ class ApiService {
     await _sendJsonMap(url, method: 'DELETE', auth: true);
   }
 
+  // ───────────────── ONLINE / PRICING GROUPS ─────────────────
+
+  Future<Map<String, dynamic>> getPricingGroups({String? search}) {
+    final s = search?.trim() ?? '';
+    final url = Uri.parse('${AppEnv.onlineBase}pricing-groups/')
+        .replace(queryParameters: s.isEmpty ? null : {'search': s});
+    return _sendJsonMap(url, method: 'GET', auth: true);
+  }
+
+  Future<Map<String, dynamic>> getPricingGroup(int id) {
+    final url = Uri.parse('${AppEnv.onlineBase}pricing-groups/$id/');
+    return _sendJsonMap(url, method: 'GET', auth: true);
+  }
+
+  /// Create (id == null) or update a group. `body` keys: name,
+  /// profit_percentage, selling_profit_percentage (null = keep), note,
+  /// category_ids, product_ids, brand_ids, dry_run.
+  Future<Map<String, dynamic>> savePricingGroup(int? id, Map<String, dynamic> body) {
+    final url = Uri.parse(id == null
+        ? '${AppEnv.onlineBase}pricing-groups/'
+        : '${AppEnv.onlineBase}pricing-groups/$id/');
+    return _sendJsonMap(url, method: id == null ? 'POST' : 'PATCH', auth: true, body: body);
+  }
+
+  Future<Map<String, dynamic>> deletePricingGroup(int id) {
+    final url = Uri.parse('${AppEnv.onlineBase}pricing-groups/$id/');
+    return _sendJsonMap(url, method: 'DELETE', auth: true);
+  }
+
+  Future<Map<String, dynamic>> reapplyPricingGroup(int id) {
+    final url = Uri.parse('${AppEnv.onlineBase}pricing-groups/$id/reapply/');
+    return _sendJsonMap(url, method: 'POST', auth: true);
+  }
+
+  Future<Map<String, dynamic>> getPricingGroupLogs(int id) {
+    final url = Uri.parse('${AppEnv.onlineBase}pricing-groups/$id/logs/');
+    return _sendJsonMap(url, method: 'GET', auth: true);
+  }
+
+  Future<Map<String, dynamic>> undoPricingGroupLog(int logId) {
+    final url = Uri.parse('${AppEnv.onlineBase}pricing-groups/logs/$logId/undo/');
+    return _sendJsonMap(url, method: 'POST', auth: true);
+  }
+
+  Future<Map<String, dynamic>> getPricingGroupOptions({
+    required String kind,
+    String? search,
+    int? withinGroup,
+    int limit = 50,
+  }) {
+    final qp = <String, String>{
+      'kind': kind,
+      'limit': '$limit',
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (withinGroup != null) 'within_group': '$withinGroup',
+    };
+    final url = Uri.parse('${AppEnv.onlineBase}pricing-groups/options/')
+        .replace(queryParameters: qp);
+    return _sendJsonMap(url, method: 'GET', auth: true);
+  }
+
+  Future<Map<String, dynamic>> getPricingGroupDealers({String? search, int? groupId}) {
+    final qp = <String, String>{
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (groupId != null) 'group_id': '$groupId',
+    };
+    final url = Uri.parse('${AppEnv.onlineBase}pricing-groups/users/')
+        .replace(queryParameters: qp.isEmpty ? null : qp);
+    return _sendJsonMap(url, method: 'GET', auth: true);
+  }
+
+  Future<Map<String, dynamic>> getPricingGroupDealer(int userId) {
+    final url = Uri.parse('${AppEnv.onlineBase}pricing-groups/users/$userId/');
+    return _sendJsonMap(url, method: 'GET', auth: true);
+  }
+
+  /// `body` keys: active, excluded_category_ids, excluded_product_ids,
+  /// excluded_brand_ids, dry_run.
+  Future<Map<String, dynamic>> savePricingGroupLink(
+    int userId,
+    int groupId,
+    Map<String, dynamic> body,
+  ) {
+    final url = Uri.parse('${AppEnv.onlineBase}pricing-groups/users/$userId/groups/$groupId/');
+    return _sendJsonMap(url, method: 'PATCH', auth: true, body: body);
+  }
+
   // ───────────────── NOTIFICATIONS ─────────────────
 
   Future<Map<String, dynamic>> getNotifications({

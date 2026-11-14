@@ -110,6 +110,24 @@ class LeftMenuDrawer extends ConsumerWidget {
                             Navigator.pop(context);
                           },
                         ),
+                        ListTile(
+                          leading: const Icon(Icons.workspaces_outline),
+                          title: const Text('Pricing groups'),
+                          selected: isRoute(R.adminPricingGroups),
+                          onTap: () {
+                            context.go(R.adminPricingGroups);
+                            Navigator.pop(context);
+                          },
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.manage_accounts_outlined),
+                          title: const Text('Dealer pricing groups'),
+                          selected: isRoute(R.adminDealerPricingGroups),
+                          onTap: () {
+                            context.go(R.adminDealerPricingGroups);
+                            Navigator.pop(context);
+                          },
+                        ),
                         if (session.isSuperuser)
                           ListTile(
                             leading: const Icon(Icons.inventory_2_outlined),

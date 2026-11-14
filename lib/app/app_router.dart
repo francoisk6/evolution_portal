@@ -17,6 +17,8 @@ import '../features/online/online_brand_selection_page.dart';
 import '../features/about/about_page.dart';
 import '../features/admin/user_brand_profit_page.dart';
 import '../features/admin/prepaid_stock_page.dart';
+import '../features/admin/pricing_groups/pricing_groups_page.dart';
+import '../features/admin/pricing_groups/dealer_pricing_groups_page.dart';
 import '../features/admin/terranet_stock_page.dart';
 import '../features/admin/workspace_ops_page.dart';
 import '../features/admin/workspace_transaction_cleanup_page.dart';
@@ -109,6 +111,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
               path: R.adminUserBrandProfit,
               builder: (c, s) => const UserBrandProfitPage()),
+          GoRoute(
+              path: R.adminPricingGroups,
+              builder: (c, s) => const PricingGroupsPage()),
+          GoRoute(
+              path: R.adminDealerPricingGroups,
+              builder: (c, s) => const DealerPricingListPage()),
           GoRoute(
               path: R.adminPrepaidStock,
               builder: (c, s) => const PrepaidStockPage()),

@@ -54,6 +54,9 @@ class UserBrandProfitItem {
   final bool deactivated;
   final Map<String, String> brandDefaults;
 
+  /// Name of the pricing group managing this row; null = managed by hand.
+  final String? pricingGroupName;
+
   const UserBrandProfitItem({
     required this.id,
     required this.user,
@@ -71,6 +74,7 @@ class UserBrandProfitItem {
     required this.nativeCustomerPrice,
     required this.deactivated,
     required this.brandDefaults,
+    this.pricingGroupName,
   });
 
   factory UserBrandProfitItem.fromJson(Map<String, dynamic> json) {
@@ -115,6 +119,9 @@ class UserBrandProfitItem {
       nativeCustomerPrice: json['native_customer_price']?.toString() ?? '',
       deactivated: asBool(json['deactivated']),
       brandDefaults: defaults,
+      pricingGroupName: (json['pricing_group'] is Map)
+          ? (json['pricing_group'] as Map)['name']?.toString()
+          : null,
     );
   }
 }

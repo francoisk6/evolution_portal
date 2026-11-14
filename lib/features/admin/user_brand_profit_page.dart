@@ -1361,6 +1361,16 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
                         '${detail.sector?.label ?? '-'} / ${detail.category?.label ?? '-'} / ${detail.product?.label ?? '-'} / ${detail.productType?.label ?? '-'}',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
+                      if (detail.pricingGroupName != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            'Managed by pricing group "${detail.pricingGroupName}". Percentage edits here are '
+                            'overwritten the next time the group is applied - exclude this brand in the group '
+                            'to keep a special price.',
+                            style: const TextStyle(fontSize: 12, color: Color(0xFFB45309)),
+                          ),
+                        ),
                       const SizedBox(height: 12),
                       _decimalField('Profit percentage', profitCtl),
                       const SizedBox(height: 10),
@@ -2169,6 +2179,13 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
                           textColor: _userBrandProfitStatusColor(item.deactivated),
                           borderColor: _userBrandProfitStatusColor(item.deactivated),
                         ),
+                        if (item.pricingGroupName != null)
+                          _UserBrandProfitMetaChip(
+                            label: 'Group',
+                            value: item.pricingGroupName!,
+                            textColor: const Color(0xFF2563EB),
+                            borderColor: const Color(0xFF2563EB),
+                          ),
                       ],
                     ),
                     const SizedBox(height: 10),
@@ -2238,6 +2255,7 @@ class _UserBrandProfitPageState extends ConsumerState<UserBrandProfitPage> {
         cell: (e) => [
           e.brand?.label ?? '-',
           if ((e.brand?.code ?? '').isNotEmpty) '(${e.brand!.code})',
+          if (e.pricingGroupName != null) '· Group: ${e.pricingGroupName}',
         ].join(' '),
       ),
       _UserBrandProfitGridCol(
