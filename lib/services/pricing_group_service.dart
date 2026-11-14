@@ -58,22 +58,20 @@ class PricingGroupService {
   Future<String> undo(int logId) async =>
       (await _api.undoPricingGroupLog(logId))['message']?.toString() ?? 'Undone.';
 
-  Future<List<PricingGroupItem>> options({
+  /// `all: true` returns every match (server cap 2000) for "Select all".
+  Future<PricingOptions> options({
     required PricingItemKind kind,
     String? search,
     int? withinGroup,
+    bool all = false,
   }) async {
     final m = await _api.getPricingGroupOptions(
       kind: kind.apiName,
       search: search,
       withinGroup: withinGroup,
+      all: all,
     );
-    final raw = m['options'];
-    if (raw is! List) return const <PricingGroupItem>[];
-    return raw
-        .whereType<Map>()
-        .map((e) => PricingGroupItem.fromJson(e.cast<String, dynamic>()))
-        .toList();
+    return PricingOptions.fromJson(m);
   }
 
   Future<List<PricingDealer>> dealers({String? search, int? groupId}) async {

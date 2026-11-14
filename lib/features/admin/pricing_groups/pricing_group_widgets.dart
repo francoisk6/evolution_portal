@@ -157,6 +157,7 @@ class PricingItemSection extends StatelessWidget {
   final List<PricingGroupItem> items;
   final VoidCallback? onAdd;
   final ValueChanged<PricingGroupItem>? onRemove;
+  final VoidCallback? onRemoveAll;
   final String emptyText;
 
   const PricingItemSection({
@@ -166,8 +167,24 @@ class PricingItemSection extends StatelessWidget {
     this.help,
     this.onAdd,
     this.onRemove,
+    this.onRemoveAll,
     this.emptyText = 'None',
   });
+
+  Future<void> _confirmRemoveAll(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Remove all ${items.length} ${title.toLowerCase()}?'),
+        content: const Text('Nothing is applied until you save.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Remove all')),
+        ],
+      ),
+    );
+    if (ok == true) onRemoveAll!();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -190,6 +207,11 @@ class PricingItemSection extends StatelessWidget {
                   child: Text('$title (${items.length})',
                       style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
                 ),
+                if (onRemoveAll != null && items.isNotEmpty)
+                  TextButton(
+                    onPressed: () => _confirmRemoveAll(context),
+                    child: const Text('Remove all'),
+                  ),
                 if (onAdd != null)
                   TextButton.icon(
                     onPressed: onAdd,
@@ -276,7 +298,10 @@ class _PricingItemPickerState extends State<_PricingItemPicker> {
   final _searchCtl = TextEditingController();
   final Map<String, PricingGroupItem> _picked = {};
   List<PricingGroupItem> _options = const [];
+  int _total = 0;
   bool _loading = false;
+  bool _selectingAll = false;
+  String? _notice;
   String? _error;
   Timer? _debounce;
   int _requestSeq = 0;
@@ -312,13 +337,59 @@ class _PricingItemPickerState extends State<_PricingItemPicker> {
         withinGroup: widget.withinGroup,
       );
       if (!mounted || seq != _requestSeq) return;
-      setState(() => _options = options);
+      setState(() {
+        _options = options.items;
+        _total = options.total;
+        _notice = null;
+      });
     } catch (e) {
       if (!mounted || seq != _requestSeq) return;
       setState(() => _error = friendlyPricingError(e));
     } finally {
       if (mounted && seq == _requestSeq) setState(() => _loading = false);
     }
+  }
+
+  /// Picks every match of the current search, not only the rows shown.
+  Future<void> _selectAll() async {
+    final seq = _requestSeq;
+    var items = _options;
+    var total = _total;
+    if (_total > _options.length) {
+      setState(() => _selectingAll = true);
+      try {
+        final all = await PricingGroupService.instance.options(
+          kind: widget.kind,
+          search: _searchCtl.text,
+          withinGroup: widget.withinGroup,
+          all: true,
+        );
+        if (!mounted || seq != _requestSeq) return; // search changed meanwhile
+        items = all.items;
+        total = all.total;
+      } catch (e) {
+        if (mounted) setState(() => _error = friendlyPricingError(e));
+        return;
+      } finally {
+        if (mounted) setState(() => _selectingAll = false);
+      }
+    }
+    setState(() {
+      var added = 0;
+      for (final o in items) {
+        if (!widget.alreadySelectedKeys.contains(o.key) && !_picked.containsKey(o.key)) {
+          _picked[o.key] = o;
+          added++;
+        }
+      }
+      if (added == 0 && _picked.isEmpty) {
+        _notice = 'All matches are already added.';
+      } else if (total > items.length) {
+        _notice = 'Selected the first ${items.length} of $total matches - narrow the search to get the rest.';
+      } else {
+        _notice = null;
+      }
+    });
   }
 
   @override
@@ -351,7 +422,37 @@ class _PricingItemPickerState extends State<_PricingItemPicker> {
                 border: const OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _loading ? 'Searching…' : '$_total matching',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
+                ),
+                if (_picked.isNotEmpty)
+                  TextButton(
+                    onPressed: _selectingAll ? null : () => setState(() {
+                      _picked.clear();
+                      _notice = null;
+                    }),
+                    child: const Text('Clear'),
+                  ),
+                TextButton.icon(
+                  onPressed: (_loading || _selectingAll || _total == 0) ? null : _selectAll,
+                  icon: _selectingAll
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.done_all, size: 18),
+                  label: Text('Select all $_total'),
+                ),
+              ],
+            ),
+            if (_notice != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(_notice!, style: const TextStyle(fontSize: 12, color: Color(0xFF92400E))),
+              ),
             if (_loading) const LinearProgressIndicator(minHeight: 2),
             if (_error != null)
               Padding(

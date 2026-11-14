@@ -584,6 +584,12 @@ class _PricingGroupEditorPageState extends State<PricingGroupEditorPage> {
                                   _dirty = true;
                                 })
                             : null,
+                        onRemoveAll: editable
+                            ? () => setState(() {
+                                  _items[kind]!.clear();
+                                  _dirty = true;
+                                })
+                            : null,
                       ),
                     if ((d?.group.items?.hiddenItemCount ?? 0) > 0)
                       Text(

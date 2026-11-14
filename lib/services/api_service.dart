@@ -2212,10 +2212,11 @@ class ApiService {
     String? search,
     int? withinGroup,
     int limit = 50,
+    bool all = false,
   }) {
     final qp = <String, String>{
       'kind': kind,
-      'limit': '$limit',
+      if (all) 'all': '1' else 'limit': '$limit',
       if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
       if (withinGroup != null) 'within_group': '$withinGroup',
     };

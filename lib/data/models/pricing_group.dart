@@ -68,6 +68,21 @@ class PricingGroupItem {
   int get hashCode => key.hashCode;
 }
 
+/// One page of picker options plus how many match in total.
+class PricingOptions {
+  final List<PricingGroupItem> items;
+  final int total;
+
+  const PricingOptions({required this.items, required this.total});
+
+  factory PricingOptions.fromJson(Map<String, dynamic> j) {
+    final items = _asMapList(j['options']).map(PricingGroupItem.fromJson).toList();
+    // Older servers send no total: fall back to what came back.
+    final total = j.containsKey('total') ? _asInt(j['total']) : items.length;
+    return PricingOptions(items: items, total: total);
+  }
+}
+
 enum PricingItemKind { category, product, brand }
 
 extension PricingItemKindX on PricingItemKind {

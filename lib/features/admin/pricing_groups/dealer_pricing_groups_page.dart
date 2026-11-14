@@ -519,6 +519,12 @@ class _ExclusionsPageState extends State<_ExclusionsPage> {
                             _items[kind]!.remove(item);
                             _dirty = true;
                           }),
+                  onRemoveAll: _busy
+                      ? null
+                      : () => setState(() {
+                            _items[kind]!.clear();
+                            _dirty = true;
+                          }),
                 ),
               if (widget.link.exclusions.hiddenItemCount > 0)
                 Text(
