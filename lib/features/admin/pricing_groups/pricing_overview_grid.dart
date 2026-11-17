@@ -289,17 +289,30 @@ class _Header extends StatelessWidget {
               width: _groupW,
               child: Tooltip(
                 message:
-                    g.active ? 'On for this dealer' : (g.linked ? 'Off for this dealer' : 'Not linked to this dealer'),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                    '${g.active ? 'On for this dealer' : (g.linked ? 'Off for this dealer' : 'Not linked to this dealer')}'
+                    ' - prices ${g.pricedCount} of its ${g.brandCount} brand(s) for him',
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.circle, size: 8, color: g.active ? _green : Colors.grey.shade400),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(g.name,
-                          overflow: TextOverflow.ellipsis,
-                          style: style.copyWith(color: g.active ? null : Colors.grey.shade600)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.circle, size: 8, color: g.active ? _green : Colors.grey.shade400),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(g.name,
+                              overflow: TextOverflow.ellipsis,
+                              style: style.copyWith(color: g.active ? null : Colors.grey.shade600)),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 2),
+                    Text('${g.pricedCount} / ${g.brandCount}',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: g.pricedCount > 0 ? _green : Colors.grey.shade600,
+                        )),
                   ],
                 ),
               ),

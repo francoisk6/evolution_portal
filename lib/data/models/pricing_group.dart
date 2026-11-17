@@ -330,6 +330,12 @@ class PricingApplySummary {
   final int claimed;
   final int released;
   final int unchanged;
+
+  /// Of the released rows: back to the dealer's own % / deactivated (the group
+  /// had created them). Reactivated = group-created rows taken again.
+  final int restored;
+  final int deactivated;
+  final int reactivated;
   final int fixedPriceRows;
   final int skippedOtherGroup;
   final bool dryRun;
@@ -342,6 +348,9 @@ class PricingApplySummary {
     this.claimed = 0,
     this.released = 0,
     this.unchanged = 0,
+    this.restored = 0,
+    this.deactivated = 0,
+    this.reactivated = 0,
     this.fixedPriceRows = 0,
     this.skippedOtherGroup = 0,
     this.dryRun = false,
@@ -355,6 +364,9 @@ class PricingApplySummary {
         claimed: _asInt(j['claimed']),
         released: _asInt(j['released']),
         unchanged: _asInt(j['unchanged']),
+        restored: _asInt(j['restored']),
+        deactivated: _asInt(j['deactivated']),
+        reactivated: _asInt(j['reactivated']),
         fixedPriceRows: _asInt(j['fixed_price_rows']),
         skippedOtherGroup: _asInt(j['skipped_owned_by_other_group']),
         dryRun: _asBool(j['dry_run']),
@@ -368,7 +380,10 @@ class PricingApplySummary {
         if (created > 0) '$created row(s) will be created (gives access to the brand)',
         if (updated > 0) '$updated row(s) will get the new percentages',
         if (claimed > 0) '$claimed existing row(s) will be taken over by the group',
-        if (released > 0) '$released row(s) will be released (keep their price, managed by hand)',
+        if (released > 0) '$released row(s) will leave the group and be managed by hand again',
+        if (restored > 0) '$restored of them go back to the dealer\'s own percentages',
+        if (deactivated > 0) '$deactivated of them will be deactivated (the group had added them)',
+        if (reactivated > 0) '$reactivated deactivated row(s) will be opened again',
         if (fixedPriceRows > 0) '$fixedPriceRows row(s) have a fixed price - the fixed price still wins',
         if (skippedOtherGroup > 0) '$skippedOtherGroup row(s) skipped - managed by another group',
         if (changes == 0) 'Nothing to change.',
@@ -439,6 +454,8 @@ class PricingGroupLog {
         'group_saved' => 'Group saved',
         'link' => 'Member changed',
         'moved_to_other_group' => 'Items moved to another group',
+        'link_deleted' => 'Member removed',
+        'group_deleted' => 'Group deleted',
         'reapply' => 'Re-applied',
         'brand_created' => 'New brand',
         _ => trigger,
@@ -693,13 +710,27 @@ class PricingOverviewGroup {
   final bool linked;
   final bool active;
 
-  const PricingOverviewGroup({required this.id, required this.name, required this.linked, required this.active});
+  /// Brands the group prices for this dealer / brands the group holds
+  /// (whole dealer, not limited by the search).
+  final int pricedCount;
+  final int brandCount;
+
+  const PricingOverviewGroup({
+    required this.id,
+    required this.name,
+    required this.linked,
+    required this.active,
+    this.pricedCount = 0,
+    this.brandCount = 0,
+  });
 
   factory PricingOverviewGroup.fromJson(Map<String, dynamic> j) => PricingOverviewGroup(
         id: _asInt(j['id']),
         name: j['name']?.toString() ?? '',
         linked: _asBool(j['linked']),
         active: _asBool(j['active']),
+        pricedCount: _asInt(j['priced_count']),
+        brandCount: _asInt(j['brand_count']),
       );
 }
 
