@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../../data/models/pricing_group.dart';
@@ -59,10 +57,15 @@ Future<bool> confirmPricingPreview(
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
-                    '${preview.prunedCount} item(s) will be removed: excluded, but not inside anything in the group.',
+                    '${preview.prunedCount} item(s) will be dropped: they change nothing '
+                    '(a broader item already decides them).',
                     style: const TextStyle(fontSize: 12.5, color: Color(0xFF92400E)),
                   ),
                 ),
+              if (preview.moves.isNotEmpty) ...[
+                PricingMovesPanel(moves: preview.moves),
+                const SizedBox(height: 8),
+              ],
               PricingSummaryPanel(summary: preview.summary),
             ],
           ),
@@ -75,6 +78,199 @@ Future<bool> confirmPricingPreview(
     ),
   );
   return ok == true;
+}
+
+/// Preview → if a dealer would get the same brands from two groups, ask how
+/// to resolve it → confirm → save. `send` is called with the chosen
+/// `onOverlap` ('move' / 'keep', null = none). Returns the saved result, or
+/// null when cancelled. Other errors are thrown to the caller.
+Future<PricingSaveResult?> runPricingSave(
+  BuildContext context, {
+  required Future<PricingSaveResult> Function({required bool dryRun, String? onOverlap}) send,
+  required String title,
+  required String confirmLabel,
+  required String groupName,
+  bool allowKeep = true,
+}) async {
+  String? mode;
+  PricingSaveResult preview;
+  try {
+    preview = await send(dryRun: true);
+  } on PricingOverlapException catch (e) {
+    if (!context.mounted) return null;
+    mode = await askPricingOverlap(context,
+        conflicts: e.conflicts, groupName: groupName, allowKeep: allowKeep);
+    if (mode == null || !context.mounted) return null;
+    preview = await send(dryRun: true, onOverlap: mode);
+  }
+  if (!context.mounted) return null;
+  final ok = await confirmPricingPreview(context, title: title, preview: preview, confirmLabel: confirmLabel);
+  if (!ok || !context.mounted) return null;
+  return send(dryRun: false, onOverlap: mode);
+}
+
+/// "Already in another group": returns 'move', 'keep' or null (cancel).
+/// allowKeep = false (editing a group): only "move" or cancel.
+Future<String?> askPricingOverlap(
+  BuildContext context, {
+  required List<PricingConflict> conflicts,
+  required String groupName,
+  bool allowKeep = true,
+}) {
+  return showDialog<String>(
+    context: context,
+    builder: (_) => _OverlapDialog(conflicts: conflicts, groupName: groupName, allowKeep: allowKeep),
+  );
+}
+
+class _OverlapDialog extends StatefulWidget {
+  final List<PricingConflict> conflicts;
+  final String groupName;
+  final bool allowKeep;
+
+  const _OverlapDialog({required this.conflicts, required this.groupName, required this.allowKeep});
+
+  @override
+  State<_OverlapDialog> createState() => _OverlapDialogState();
+}
+
+class _OverlapDialogState extends State<_OverlapDialog> {
+  static const _maxListed = 8;
+  late String _mode;
+
+  @override
+  void initState() {
+    super.initState();
+    _mode = !widget.allowKeep || widget.conflicts.any((c) => c.suggested == 'move') ? 'move' : 'keep';
+  }
+
+  String get _others {
+    final names = {for (final c in widget.conflicts) c.otherGroupName}.map((n) => '"$n"').toList();
+    return names.join(', ');
+  }
+
+  Widget _option(String value, String title, String subtitle) {
+    final selected = _mode == value;
+    final color = Theme.of(context).colorScheme.primary;
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(top: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: selected ? color : Colors.grey.shade300, width: selected ? 1.5 : 1),
+      ),
+      child: ListTile(
+        dense: true,
+        onTap: () => setState(() => _mode = value),
+        leading: Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+            color: selected ? color : Colors.grey.shade500),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final list = widget.conflicts;
+    final more = list.length - _maxListed;
+    final users = {for (final c in list) c.username};
+    final who = users.length == 1 ? users.first : '${users.length} dealers';
+    return AlertDialog(
+      icon: const Icon(Icons.call_split, color: Color(0xFFB45309)),
+      title: const Text('Already in another group'),
+      content: SizedBox(
+        width: 480,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('A dealer cannot get the same item from two groups. $who already gets these from $_others:',
+                  style: const TextStyle(fontSize: 13)),
+              const SizedBox(height: 8),
+              for (final c in list.take(_maxListed))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    '• ${users.length > 1 ? '${c.username} · ' : ''}"${c.otherGroupName}": '
+                    '${c.brandCount} brand(s) - ${c.brandsLabel}',
+                    style: TextStyle(fontSize: 12.5, color: Colors.grey.shade800),
+                  ),
+                ),
+              if (more > 0)
+                Text('+$more more', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+              if (widget.allowKeep) ...[
+                _option('move', 'Move them to "${widget.groupName}"',
+                    'They are excluded from $_others for $who.'),
+                _option('keep', 'Keep them in $_others',
+                    '"${widget.groupName}" skips them for $who.'),
+              ] else
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Exclude them from $_others for ${users.length == 1 ? who : 'these dealers'} '
+                    'and add them to "${widget.groupName}"?',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              Text('You will see a preview before anything is saved.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _mode),
+          child: Text(widget.allowKeep ? 'Continue' : 'Exclude there & add here'),
+        ),
+      ],
+    );
+  }
+}
+
+/// What an overlap fix changes in the dealers' other groups.
+class PricingMovesPanel extends StatelessWidget {
+  final List<PricingMove> moves;
+
+  const PricingMovesPanel({super.key, required this.moves});
+
+  @override
+  Widget build(BuildContext context) {
+    const amber = Color(0xFFB45309);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: amber.withValues(alpha: .06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: amber.withValues(alpha: .25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(bottom: 6),
+            child: Text('Overlap fix', style: TextStyle(fontWeight: FontWeight.w800)),
+          ),
+          for (final m in moves)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Text(
+                m.turnedOff
+                    ? '• ${m.username} · "${m.groupName}": nothing would be left - it will be turned off '
+                        'for ${m.username}.'
+                    : '• ${m.username} · "${m.groupName}": ${m.brandCount} brand(s) excluded - ${m.brandsLabel}',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class PricingSummaryPanel extends StatelessWidget {
@@ -148,391 +344,6 @@ class PricingInfoChip extends StatelessWidget {
       ),
     );
   }
-}
-
-/// A titled list of removable chips with an "Add" button.
-class PricingItemSection extends StatelessWidget {
-  final String title;
-  final String? help;
-  final List<PricingGroupItem> items;
-  final VoidCallback? onAdd;
-  final ValueChanged<PricingGroupItem>? onRemove;
-  final VoidCallback? onRemoveAll;
-  final String emptyText;
-
-  const PricingItemSection({
-    super.key,
-    required this.title,
-    required this.items,
-    this.help,
-    this.onAdd,
-    this.onRemove,
-    this.onRemoveAll,
-    this.emptyText = 'None',
-  });
-
-  Future<void> _confirmRemoveAll(BuildContext context) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Remove all ${items.length} ${title.toLowerCase()}?'),
-        content: const Text('Nothing is applied until you save.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Remove all')),
-        ],
-      ),
-    );
-    if (ok == true) onRemoveAll!();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      color: Colors.white,
-      margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.shade300),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text('$title (${items.length})',
-                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-                ),
-                if (onRemoveAll != null && items.isNotEmpty)
-                  TextButton(
-                    onPressed: () => _confirmRemoveAll(context),
-                    child: const Text('Remove all'),
-                  ),
-                if (onAdd != null)
-                  TextButton.icon(
-                    onPressed: onAdd,
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Add'),
-                  ),
-              ],
-            ),
-            if (help != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text(help!, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-              ),
-            if (items.isEmpty)
-              Text(emptyText, style: TextStyle(fontSize: 12.5, color: Colors.grey.shade500))
-            else
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final item in items)
-                    InputChip(
-                      label: Text(
-                        item.subtitle.isEmpty ? item.label : '${item.label} · ${item.subtitle}',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      tooltip: item.productIds.length > 1
-                          ? '${item.productIds.length} products share this name'
-                          : null,
-                      onDeleted: onRemove == null ? null : () => onRemove!(item),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Bottom sheet: server-side search, multi-select. Returns the picked items.
-Future<List<PricingGroupItem>?> pickPricingItems(
-  BuildContext context, {
-  required PricingItemKind kind,
-  required Set<String> alreadySelectedKeys,
-  int? withinGroup,
-  String? title,
-}) {
-  return showModalBottomSheet<List<PricingGroupItem>>(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (_) => FractionallySizedBox(
-      heightFactor: 0.82,
-      child: _PricingItemPicker(
-        kind: kind,
-        withinGroup: withinGroup,
-        alreadySelectedKeys: alreadySelectedKeys,
-        title: title ?? 'Add ${kind.title.toLowerCase()}',
-      ),
-    ),
-  );
-}
-
-class _PricingItemPicker extends StatefulWidget {
-  final PricingItemKind kind;
-  final int? withinGroup;
-  final Set<String> alreadySelectedKeys;
-  final String title;
-
-  const _PricingItemPicker({
-    required this.kind,
-    required this.withinGroup,
-    required this.alreadySelectedKeys,
-    required this.title,
-  });
-
-  @override
-  State<_PricingItemPicker> createState() => _PricingItemPickerState();
-}
-
-class _PricingItemPickerState extends State<_PricingItemPicker> {
-  final _searchCtl = TextEditingController();
-  final Map<String, PricingGroupItem> _picked = {};
-  List<PricingGroupItem> _options = const [];
-  int _total = 0;
-  bool _loading = false;
-  bool _selectingAll = false;
-  String? _notice;
-  String? _error;
-  Timer? _debounce;
-  int _requestSeq = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _searchCtl.dispose();
-    super.dispose();
-  }
-
-  void _onSearchChanged(String _) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 350), _load);
-  }
-
-  Future<void> _load() async {
-    final seq = ++_requestSeq;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final options = await PricingGroupService.instance.options(
-        kind: widget.kind,
-        search: _searchCtl.text,
-        withinGroup: widget.withinGroup,
-      );
-      if (!mounted || seq != _requestSeq) return;
-      setState(() {
-        _options = options.items;
-        _total = options.total;
-        _notice = null;
-      });
-    } catch (e) {
-      if (!mounted || seq != _requestSeq) return;
-      setState(() => _error = friendlyPricingError(e));
-    } finally {
-      if (mounted && seq == _requestSeq) setState(() => _loading = false);
-    }
-  }
-
-  /// Picks every match of the current search, not only the rows shown.
-  Future<void> _selectAll() async {
-    final seq = _requestSeq;
-    var items = _options;
-    var total = _total;
-    if (_total > _options.length) {
-      setState(() => _selectingAll = true);
-      try {
-        final all = await PricingGroupService.instance.options(
-          kind: widget.kind,
-          search: _searchCtl.text,
-          withinGroup: widget.withinGroup,
-          all: true,
-        );
-        if (!mounted || seq != _requestSeq) return; // search changed meanwhile
-        items = all.items;
-        total = all.total;
-      } catch (e) {
-        if (mounted) setState(() => _error = friendlyPricingError(e));
-        return;
-      } finally {
-        if (mounted) setState(() => _selectingAll = false);
-      }
-    }
-    setState(() {
-      var added = 0;
-      for (final o in items) {
-        if (!widget.alreadySelectedKeys.contains(o.key) && !_picked.containsKey(o.key)) {
-          _picked[o.key] = o;
-          added++;
-        }
-      }
-      if (added == 0 && _picked.isEmpty) {
-        _notice = 'All matches are already added.';
-      } else if (total > items.length) {
-        _notice = 'Selected the first ${items.length} of $total matches - narrow the search to get the rest.';
-      } else {
-        _notice = null;
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(12, 0, 12, MediaQuery.of(context).viewInsets.bottom + 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(widget.title,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-                ),
-                PricingInfoChip('${_picked.length} selected',
-                    color: Theme.of(context).colorScheme.primary),
-              ],
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _searchCtl,
-              autofocus: true,
-              onChanged: _onSearchChanged,
-              decoration: InputDecoration(
-                isDense: true,
-                prefixIcon: const Icon(Icons.search),
-                hintText: 'Search ${widget.kind.title.toLowerCase()}…',
-                border: const OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _loading ? 'Searching…' : '$_total matching',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                  ),
-                ),
-                if (_picked.isNotEmpty)
-                  TextButton(
-                    onPressed: _selectingAll ? null : () => setState(() {
-                      _picked.clear();
-                      _notice = null;
-                    }),
-                    child: const Text('Clear'),
-                  ),
-                TextButton.icon(
-                  onPressed: (_loading || _selectingAll || _total == 0) ? null : _selectAll,
-                  icon: _selectingAll
-                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.done_all, size: 18),
-                  label: Text('Select all $_total'),
-                ),
-              ],
-            ),
-            if (_notice != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(_notice!, style: const TextStyle(fontSize: 12, color: Color(0xFF92400E))),
-              ),
-            if (_loading) const LinearProgressIndicator(minHeight: 2),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Text(_error!, style: const TextStyle(color: Color(0xFFB91C1C))),
-              ),
-            Expanded(
-              child: _options.isEmpty && !_loading
-                  ? Center(
-                      child: Text(
-                        _searchCtl.text.trim().isEmpty ? 'Nothing to pick.' : 'No match.',
-                        style: TextStyle(color: Colors.grey.shade600),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: _options.length,
-                      itemBuilder: (context, i) {
-                        final o = _options[i];
-                        final already = widget.alreadySelectedKeys.contains(o.key);
-                        final picked = already || _picked.containsKey(o.key);
-                        return CheckboxListTile(
-                          dense: true,
-                          value: picked,
-                          onChanged: already
-                              ? null
-                              : (v) => setState(() {
-                                    if (v == true) {
-                                      _picked[o.key] = o;
-                                    } else {
-                                      _picked.remove(o.key);
-                                    }
-                                  }),
-                          title: Text(o.label, style: const TextStyle(fontSize: 13.5)),
-                          subtitle: Text(
-                            [
-                              if (o.subtitle.isNotEmpty) o.subtitle,
-                              if (o.productIds.length > 1) '${o.productIds.length} products',
-                              if (already) 'already added',
-                            ].join(' · '),
-                            style: const TextStyle(fontSize: 11.5),
-                          ),
-                          controlAffinity: ListTileControlAffinity.leading,
-                        );
-                      },
-                    ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: _picked.isEmpty
-                        ? null
-                        : () => Navigator.pop(context, _picked.values.toList()),
-                    child: Text('Add ${_picked.isEmpty ? '' : _picked.length}'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Flattens picked items into the id lists the API expects.
-List<int> pricingIdsOf(List<PricingGroupItem> items, PricingItemKind kind) {
-  if (kind == PricingItemKind.product) {
-    return {for (final i in items) ...(i.productIds.isNotEmpty ? i.productIds : [if (i.id != null) i.id!])}
-        .toList();
-  }
-  return [for (final i in items) if (i.id != null) i.id!];
 }
 
 /// Centers page content at a readable width.

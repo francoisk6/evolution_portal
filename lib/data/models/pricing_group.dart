@@ -6,6 +6,10 @@
 // resulting % into the dealer's user-x-brand rows. Percentages are
 // multipliers ("1.05" = +5%); a blank % is taken from the item above it, and
 // blank all the way up means "leave that value alone on existing rows".
+//
+// Each dealer's link to a group has its own filter: "Only" rows (empty = the
+// whole group) and "Except" rows; the most specific row wins. A dealer may not
+// get the same brand from two groups that are on.
 
 int _asInt(dynamic v) => v is num ? v.toInt() : int.tryParse('${v ?? ''}') ?? 0;
 
@@ -159,6 +163,47 @@ class PricingGroupEntry {
       excluded: _asBool(j['excluded']),
       profitPercentage: _asStrOrNull(j['profit_percentage']),
       sellingProfitPercentage: _asStrOrNull(j['selling_profit_percentage']),
+      editable: j.containsKey('editable') ? _asBool(j['editable']) : true,
+    );
+  }
+}
+
+/// One row of a dealer's own filter on a group: Only or Except.
+class PricingLinkEntry {
+  final PricingItemKind kind;
+  final int id;
+  final String label;
+  final String subtitle;
+  final int? categoryId;
+  final int? productId;
+
+  /// 'only' or 'except'.
+  final String state;
+  final bool editable;
+
+  const PricingLinkEntry({
+    required this.kind,
+    required this.id,
+    required this.label,
+    required this.subtitle,
+    required this.state,
+    this.categoryId,
+    this.productId,
+    this.editable = true,
+  });
+
+  static PricingLinkEntry? fromJson(Map<String, dynamic> j) {
+    final kind = pricingKindFromApi(j['kind']?.toString());
+    final state = j['state']?.toString();
+    if (kind == null || j['id'] == null || (state != 'only' && state != 'except')) return null;
+    return PricingLinkEntry(
+      kind: kind,
+      id: _asInt(j['id']),
+      label: j['label']?.toString() ?? '',
+      subtitle: j['subtitle']?.toString() ?? '',
+      categoryId: _asIntOrNull(j['category_id']),
+      productId: _asIntOrNull(j['product_id']),
+      state: state!,
       editable: j.containsKey('editable') ? _asBool(j['editable']) : true,
     );
   }
@@ -337,6 +382,7 @@ class PricingGroupMember {
   final bool isActiveUser;
   final bool active;
   final int exclusionCount;
+  final int onlyCount;
 
   const PricingGroupMember({
     required this.userId,
@@ -345,6 +391,7 @@ class PricingGroupMember {
     required this.isActiveUser,
     required this.active,
     required this.exclusionCount,
+    this.onlyCount = 0,
   });
 
   factory PricingGroupMember.fromJson(Map<String, dynamic> j) => PricingGroupMember(
@@ -354,6 +401,7 @@ class PricingGroupMember {
         isActiveUser: _asBool(j['is_active']),
         active: _asBool(j['active']),
         exclusionCount: _asInt(j['exclusion_count']),
+        onlyCount: _asInt(j['only_count']),
       );
 }
 
@@ -390,6 +438,7 @@ class PricingGroupLog {
         'group_created' => 'Group created',
         'group_saved' => 'Group saved',
         'link' => 'Member changed',
+        'moved_to_other_group' => 'Items moved to another group',
         'reapply' => 'Re-applied',
         'brand_created' => 'New brand',
         _ => trigger,
@@ -441,11 +490,92 @@ class PricingGroupListResponse {
   }
 }
 
+/// One dealer would get the same brands from two groups that are on.
+class PricingConflict {
+  final int userId;
+  final String username;
+  final int groupId;
+  final String groupName;
+  final int otherGroupId;
+  final String otherGroupName;
+  final int brandCount;
+  final List<String> brands;
+
+  /// 'move' (the other group gives them up) or 'keep' (this group does).
+  final String suggested;
+
+  const PricingConflict({
+    required this.userId,
+    required this.username,
+    required this.groupId,
+    required this.groupName,
+    required this.otherGroupId,
+    required this.otherGroupName,
+    required this.brandCount,
+    required this.brands,
+    required this.suggested,
+  });
+
+  factory PricingConflict.fromJson(Map<String, dynamic> j) => PricingConflict(
+        userId: _asInt(j['user_id']),
+        username: j['username']?.toString() ?? '',
+        groupId: _asInt(j['group_id']),
+        groupName: j['group_name']?.toString() ?? '',
+        otherGroupId: _asInt(j['other_group_id']),
+        otherGroupName: j['other_group_name']?.toString() ?? '',
+        brandCount: _asInt(j['brand_count']),
+        brands: (j['brands'] is List) ? (j['brands'] as List).map((e) => '$e').toList() : const [],
+        suggested: j['suggested']?.toString() == 'move' ? 'move' : 'keep',
+      );
+
+  String get brandsLabel {
+    final more = brandCount - brands.length;
+    return brands.join(', ') + (more > 0 ? ' (+$more more)' : '');
+  }
+}
+
+/// Brands one dealer's link gives up to resolve an overlap.
+class PricingMove {
+  final int userId;
+  final String username;
+  final int groupId;
+  final String groupName;
+  final int brandCount;
+  final List<String> brands;
+  final bool turnedOff;
+
+  const PricingMove({
+    required this.userId,
+    required this.username,
+    required this.groupId,
+    required this.groupName,
+    required this.brandCount,
+    required this.brands,
+    required this.turnedOff,
+  });
+
+  factory PricingMove.fromJson(Map<String, dynamic> j) => PricingMove(
+        userId: _asInt(j['user_id']),
+        username: j['username']?.toString() ?? '',
+        groupId: _asInt(j['group_id']),
+        groupName: j['group_name']?.toString() ?? '',
+        brandCount: _asInt(j['brand_count']),
+        brands: (j['brands'] is List) ? (j['brands'] as List).map((e) => '$e').toList() : const [],
+        turnedOff: _asBool(j['turned_off']),
+      );
+
+  String get brandsLabel {
+    final more = brandCount - brands.length;
+    return brands.join(', ') + (more > 0 ? ' (+$more more)' : '');
+  }
+}
+
 /// Server reply to a save / preview.
 class PricingSaveResult {
   final String message;
   final PricingApplySummary summary;
   final int prunedCount;
+  final List<PricingMove> moves;
   final Map<String, dynamic> raw;
 
   const PricingSaveResult({
@@ -453,12 +583,14 @@ class PricingSaveResult {
     required this.summary,
     required this.prunedCount,
     required this.raw,
+    this.moves = const <PricingMove>[],
   });
 
   factory PricingSaveResult.fromJson(Map<String, dynamic> j) => PricingSaveResult(
         message: j['message']?.toString() ?? '',
         summary: PricingApplySummary.fromJson(_asMap(j['summary'])),
         prunedCount: (j['pruned'] is List) ? (j['pruned'] as List).length : 0,
+        moves: _asMapList(j['moves']).map(PricingMove.fromJson).toList(),
         raw: j,
       );
 }
@@ -496,6 +628,11 @@ class PricingUserLink {
   final bool linked;
   final bool active;
   final PricingGroupItems exclusions;
+  final PricingGroupItems only;
+
+  /// The dealer's Only / Except rows.
+  final List<PricingLinkEntry> entries;
+  final int hiddenEntryCount;
   final int scopeCount;
   final int managedRows;
 
@@ -506,6 +643,9 @@ class PricingUserLink {
     required this.exclusions,
     required this.scopeCount,
     required this.managedRows,
+    this.only = const PricingGroupItems(),
+    this.entries = const <PricingLinkEntry>[],
+    this.hiddenEntryCount = 0,
   });
 
   factory PricingUserLink.fromJson(Map<String, dynamic> j) => PricingUserLink(
@@ -513,19 +653,35 @@ class PricingUserLink {
         linked: _asBool(j['linked']),
         active: _asBool(j['active']),
         exclusions: PricingGroupItems.fromJson(_asMap(j['exclusions'])),
+        only: PricingGroupItems.fromJson(_asMap(j['only'])),
+        entries: _asMapList(j['entries'])
+            .map(PricingLinkEntry.fromJson)
+            .whereType<PricingLinkEntry>()
+            .toList(),
+        hiddenEntryCount: _asInt(j['hidden_entry_count']),
         scopeCount: _asInt(j['scope_count']),
         managedRows: _asInt(j['managed_rows']),
       );
+
+  /// "Whole group", "Only 2", "Only 2 · Except 5".
+  String get ruleLabel {
+    final o = only.total;
+    final x = exclusions.total;
+    if (o == 0 && x == 0) return 'Whole group';
+    return [if (o > 0) 'Only $o', if (x > 0) 'Except $x'].join(' · ');
+  }
 }
 
 class PricingUserDetail {
   final PricingDealer user;
   final List<PricingUserLink> groups;
+  final bool canUseCategories;
 
-  const PricingUserDetail({required this.user, required this.groups});
+  const PricingUserDetail({required this.user, required this.groups, this.canUseCategories = false});
 
   factory PricingUserDetail.fromJson(Map<String, dynamic> j) => PricingUserDetail(
         user: PricingDealer.fromJson(_asMap(j['user'])),
         groups: _asMapList(j['groups']).map(PricingUserLink.fromJson).toList(),
+        canUseCategories: _asBool(_asMap(j['permissions'])['can_use_categories']),
       );
 }

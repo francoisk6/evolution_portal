@@ -7,6 +7,7 @@ import '../../../data/models/pricing_group.dart';
 import '../../../services/pricing_group_service.dart';
 import '../../../state/session_provider.dart';
 import 'pricing_group_widgets.dart';
+import 'pricing_rule_grid.dart';
 
 /// Admin › Dealer pricing groups: pick a dealer.
 class DealerPricingListPage extends ConsumerStatefulWidget {
@@ -91,7 +92,7 @@ class _DealerPricingListPageState extends ConsumerState<DealerPricingListPage> {
                 ],
               ),
               const SizedBox(height: 4),
-              Text('Pick a dealer to turn groups on or off and set exclusions.',
+              Text('Pick a dealer to turn groups on or off and choose Only / Except items.',
                   style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700)),
               const SizedBox(height: 12),
               TextField(
@@ -171,7 +172,7 @@ class _DealerPricingListPageState extends ConsumerState<DealerPricingListPage> {
   }
 }
 
-/// One dealer: every group with an on/off switch and exclusions.
+/// One dealer: every group with an on/off switch and the dealer's Only / Except items.
 class DealerPricingGroupsPage extends StatefulWidget {
   final int userId;
   final String username;
@@ -216,20 +217,22 @@ class _DealerPricingGroupsPageState extends State<DealerPricingGroupsPage> {
     final gid = link.group.id;
     setState(() => _busyGroups.add(gid));
     try {
-      final svc = PricingGroupService.instance;
-      final preview = await svc.saveLink(userId: widget.userId, groupId: gid, active: on, dryRun: true);
-      if (!mounted) return;
-      final ok = await confirmPricingPreview(
+      final res = await runPricingSave(
         context,
+        send: ({required bool dryRun, String? onOverlap}) => PricingGroupService.instance.saveLink(
+          userId: widget.userId,
+          groupId: gid,
+          active: on,
+          onOverlap: onOverlap,
+          dryRun: dryRun,
+        ),
         title: on
             ? 'Turn on "${link.group.name}" for ${widget.username}?'
             : 'Turn off "${link.group.name}" for ${widget.username}?',
-        preview: preview,
         confirmLabel: on ? 'Turn on' : 'Turn off',
+        groupName: link.group.name,
       );
-      if (!ok || !mounted) return;
-      final res = await svc.saveLink(userId: widget.userId, groupId: gid, active: on);
-      if (!mounted) return;
+      if (res == null || !mounted) return;
       _changed = true;
       showPricingSnack(context, res.message);
       await _load();
@@ -240,10 +243,15 @@ class _DealerPricingGroupsPageState extends State<DealerPricingGroupsPage> {
     }
   }
 
-  Future<void> _editExclusions(PricingUserLink link) async {
+  Future<void> _editRule(PricingUserLink link) async {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => _ExclusionsPage(userId: widget.userId, username: widget.username, link: link),
+        builder: (_) => _LinkRulePage(
+          userId: widget.userId,
+          username: widget.username,
+          link: link,
+          canUseCategories: _detail?.canUseCategories ?? false,
+        ),
       ),
     );
     if (changed == true) {
@@ -295,8 +303,8 @@ class _DealerPricingGroupsPageState extends State<DealerPricingGroupsPage> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Turn on the groups this dealer should follow. Two groups that are on may not cover the '
-                        'same brand - exclude the shared items in one of them.',
+                        'Turn on the groups this dealer should follow. Two groups that are on may not give the '
+                        'same item - when they would, you choose which group keeps it.',
                         style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
                       ),
                       const SizedBox(height: 12),
@@ -319,7 +327,6 @@ class _DealerPricingGroupsPageState extends State<DealerPricingGroupsPage> {
 
   Widget _linkCard(PricingUserLink link) {
     final busy = _busyGroups.contains(link.group.id);
-    final ex = link.exclusions;
     final on = link.active;
     final accent = on ? const Color(0xFF1E7E34) : Colors.grey.shade500;
     return Card(
@@ -364,16 +371,14 @@ class _DealerPricingGroupsPageState extends State<DealerPricingGroupsPage> {
               children: [
                 Expanded(
                   child: Text(
-                    ex.total == 0
-                        ? 'No exclusions'
-                        : 'Excluded: ${ex.categories.length} cat · ${ex.products.length} prod · ${ex.brands.length} brand',
+                    link.ruleLabel,
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                   ),
                 ),
                 TextButton.icon(
-                  onPressed: busy ? null : () => _editExclusions(link),
-                  icon: const Icon(Icons.block_outlined, size: 18),
-                  label: const Text('Exclusions'),
+                  onPressed: busy ? null : () => _editRule(link),
+                  icon: const Icon(Icons.tune, size: 18),
+                  label: const Text('Only / Except'),
                 ),
               ],
             ),
@@ -384,76 +389,69 @@ class _DealerPricingGroupsPageState extends State<DealerPricingGroupsPage> {
   }
 }
 
-class _ExclusionsPage extends StatefulWidget {
+/// The dealer's Only / Except items on one group, as a grid.
+class _LinkRulePage extends StatefulWidget {
   final int userId;
   final String username;
   final PricingUserLink link;
+  final bool canUseCategories;
 
-  const _ExclusionsPage({required this.userId, required this.username, required this.link});
+  const _LinkRulePage({
+    required this.userId,
+    required this.username,
+    required this.link,
+    required this.canUseCategories,
+  });
 
   @override
-  State<_ExclusionsPage> createState() => _ExclusionsPageState();
+  State<_LinkRulePage> createState() => _LinkRulePageState();
 }
 
-class _ExclusionsPageState extends State<_ExclusionsPage> {
-  late final Map<PricingItemKind, List<PricingGroupItem>> _items;
+class _LinkRulePageState extends State<_LinkRulePage> {
+  final _book = PricingRuleBook();
   bool _busy = false;
-  bool _dirty = false;
 
   @override
   void initState() {
     super.initState();
-    final ex = widget.link.exclusions;
-    _items = {for (final k in PricingItemKind.values) k: List<PricingGroupItem>.from(ex.of(k))};
+    _book.load(widget.link.entries);
+    _book.addListener(_onBook);
+  }
+
+  @override
+  void dispose() {
+    _book.removeListener(_onBook);
+    _book.dispose();
+    super.dispose();
+  }
+
+  void _onBook() {
+    if (mounted) setState(() {});
   }
 
   List<PricingItemKind> get _kinds => [
-        if (widget.link.group.counts.categories > 0 || _items[PricingItemKind.category]!.isNotEmpty)
-          PricingItemKind.category,
+        if (widget.canUseCategories) PricingItemKind.category,
         PricingItemKind.product,
         PricingItemKind.brand,
       ];
 
-  Future<void> _add(PricingItemKind kind) async {
-    final picked = await pickPricingItems(
-      context,
-      kind: kind,
-      withinGroup: widget.link.group.id,
-      alreadySelectedKeys: _items[kind]!.map((e) => e.key).toSet(),
-      title: 'Exclude ${kind.title.toLowerCase()}',
-    );
-    if (picked == null || picked.isEmpty) return;
-    setState(() {
-      _items[kind]!.addAll(picked);
-      _dirty = true;
-    });
-  }
-
-  Future<PricingSaveResult> _send({required bool dryRun}) {
-    return PricingGroupService.instance.saveLink(
-      userId: widget.userId,
-      groupId: widget.link.group.id,
-      excludedCategoryIds: pricingIdsOf(_items[PricingItemKind.category]!, PricingItemKind.category),
-      excludedProductIds: pricingIdsOf(_items[PricingItemKind.product]!, PricingItemKind.product),
-      excludedBrandIds: pricingIdsOf(_items[PricingItemKind.brand]!, PricingItemKind.brand),
-      dryRun: dryRun,
-    );
-  }
-
   Future<void> _save() async {
     setState(() => _busy = true);
     try {
-      final preview = await _send(dryRun: true);
-      if (!mounted) return;
-      final ok = await confirmPricingPreview(
+      final res = await runPricingSave(
         context,
-        title: 'Save exclusions?',
-        preview: preview,
+        send: ({required bool dryRun, String? onOverlap}) => PricingGroupService.instance.saveLink(
+          userId: widget.userId,
+          groupId: widget.link.group.id,
+          items: _book.toJson(),
+          onOverlap: onOverlap,
+          dryRun: dryRun,
+        ),
+        title: 'Save Only / Except for ${widget.username}?',
         confirmLabel: 'Save',
+        groupName: widget.link.group.name,
       );
-      if (!ok || !mounted) return;
-      final res = await _send(dryRun: false);
-      if (!mounted) return;
+      if (res == null || !mounted) return;
       showPricingSnack(context, res.message);
       Navigator.of(context).pop(true);
     } catch (e) {
@@ -465,8 +463,9 @@ class _ExclusionsPageState extends State<_ExclusionsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final dirty = _book.isDirty;
     return PopScope(
-      canPop: !_dirty,
+      canPop: !dirty,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
         final leave = await showDialog<bool>(
@@ -487,7 +486,7 @@ class _ExclusionsPageState extends State<_ExclusionsPage> {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
             child: FilledButton.icon(
-              onPressed: _busy || !_dirty ? null : _save,
+              onPressed: _busy || !dirty ? null : _save,
               icon: _busy
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.check),
@@ -499,35 +498,35 @@ class _ExclusionsPageState extends State<_ExclusionsPage> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  PricingInfoChip(widget.link.active ? 'On' : 'Off',
+                      color: widget.link.active ? const Color(0xFF1E7E34) : const Color(0xFF6B7280)),
+                  PricingInfoChip('Gets ${widget.link.scopeCount} brand(s) now', icon: Icons.sell_outlined),
+                ],
+              ),
+              const SizedBox(height: 8),
               Text(
-                'Excluded items keep this dealer\'s own price; the group does not touch them. '
-                'Only items inside "${widget.link.group.name}" can be excluded.',
+                'Items not marked keep following the group. The most specific row wins: '
+                'brand › product › category. Tap a row to open what is inside it.',
                 style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
               ),
               const SizedBox(height: 12),
-              for (final kind in _kinds)
-                PricingItemSection(
-                  title: 'Excluded ${kind.title.toLowerCase()}',
-                  items: _items[kind]!,
-                  onAdd: _busy ? null : () => _add(kind),
-                  onRemove: _busy
-                      ? null
-                      : (item) => setState(() {
-                            _items[kind]!.remove(item);
-                            _dirty = true;
-                          }),
-                  onRemoveAll: _busy
-                      ? null
-                      : () => setState(() {
-                            _items[kind]!.clear();
-                            _dirty = true;
-                          }),
-                ),
-              if (widget.link.exclusions.hiddenItemCount > 0)
-                Text(
-                  '${widget.link.exclusions.hiddenItemCount} exclusion(s) set by a superuser are not shown; '
-                  'they are kept.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              PricingRuleGrid(
+                book: _book,
+                groupId: widget.link.group.id,
+                kinds: _kinds,
+                editable: !_busy,
+              ),
+              if (widget.link.hiddenEntryCount > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    '${widget.link.hiddenEntryCount} item(s) set by a superuser are not shown; they are kept.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
                 ),
             ],
           ),

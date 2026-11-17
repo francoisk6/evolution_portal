@@ -299,12 +299,13 @@ class _PricingGroupEditorPageState extends State<PricingGroupEditorPage> {
     return _book.validate();
   }
 
-  Future<PricingSaveResult> _send({required bool dryRun}) {
+  Future<PricingSaveResult> _send({required bool dryRun, String? onOverlap}) {
     return PricingGroupService.instance.save(
       id: _groupId,
       name: _nameCtl.text,
       note: _noteCtl.text,
       items: _book.toJson(),
+      onOverlap: onOverlap,
       dryRun: dryRun,
     );
   }
@@ -317,17 +318,17 @@ class _PricingGroupEditorPageState extends State<PricingGroupEditorPage> {
     }
     setState(() => _busy = true);
     try {
-      final preview = await _send(dryRun: true);
-      if (!mounted) return;
-      final ok = await confirmPricingPreview(
+      // An item a member already gets from another group: offer to exclude it
+      // there and add it here, or cancel.
+      final result = await runPricingSave(
         context,
+        send: _send,
         title: _groupId == null ? 'Create "${_nameCtl.text.trim()}"?' : 'Save and apply?',
-        preview: preview,
         confirmLabel: _groupId == null ? 'Create' : 'Save & apply',
+        groupName: _nameCtl.text.trim(),
+        allowKeep: false,
       );
-      if (!ok || !mounted) return;
-      final result = await _send(dryRun: false);
-      if (!mounted) return;
+      if (result == null || !mounted) return;
       _changedSomething = true;
       final newId = result.raw['group'] is Map ? (result.raw['group'] as Map)['id'] : null;
       if (_groupId == null && newId is num) _groupId = newId.toInt();
@@ -620,7 +621,8 @@ class _PricingGroupEditorPageState extends State<PricingGroupEditorPage> {
                 subtitle: Text([
                   if (m.fullName.isNotEmpty) m.fullName,
                   m.active ? 'on' : 'off',
-                  if (m.exclusionCount > 0) '${m.exclusionCount} exclusion(s)',
+                  if (m.onlyCount > 0) 'only ${m.onlyCount}',
+                  if (m.exclusionCount > 0) 'except ${m.exclusionCount}',
                   if (!m.isActiveUser) 'inactive user',
                 ].join(' · ')),
                 trailing: const Icon(Icons.chevron_right),
