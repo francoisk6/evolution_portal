@@ -2246,8 +2246,34 @@ class ApiService {
     return _sendJsonMap(url, method: 'GET', auth: true);
   }
 
-  /// `body` keys: active, excluded_category_ids, excluded_product_ids,
-  /// excluded_brand_ids, dry_run.
+  /// One dealer x every group, item by item (read-only).
+  Future<Map<String, dynamic>> getPricingGroupDealerOverview(
+    int userId, {
+    String type = 'all',
+    String? search,
+    bool unpricedOnly = false,
+    int limit = 50,
+    int offset = 0,
+    int? categoryId,
+    List<int>? productIds,
+  }) {
+    final qp = <String, String>{
+      'type': type,
+      'limit': '$limit',
+      if (offset > 0) 'offset': '$offset',
+      if (unpricedOnly) 'filter': 'unpriced',
+      if (categoryId != null) 'category_id': '$categoryId',
+      if (productIds != null && productIds.isNotEmpty) 'product_ids': productIds.join(','),
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+    };
+    final url = Uri.parse('${AppEnv.onlineBase}pricing-groups/users/$userId/overview/')
+        .replace(queryParameters: qp);
+    return _sendJsonMap(url, method: 'GET', auth: true);
+  }
+
+  /// `body` keys: active, items ([{kind, id, state}]) or the older
+  /// excluded_category_ids / excluded_product_ids / excluded_brand_ids,
+  /// on_overlap, dry_run.
   Future<Map<String, dynamic>> savePricingGroupLink(
     int userId,
     int groupId,

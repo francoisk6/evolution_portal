@@ -685,3 +685,106 @@ class PricingUserDetail {
         canUseCategories: _asBool(_asMap(j['permissions'])['can_use_categories']),
       );
 }
+
+/// One group column of a dealer's overview.
+class PricingOverviewGroup {
+  final int id;
+  final String name;
+  final bool linked;
+  final bool active;
+
+  const PricingOverviewGroup({required this.id, required this.name, required this.linked, required this.active});
+
+  factory PricingOverviewGroup.fromJson(Map<String, dynamic> j) => PricingOverviewGroup(
+        id: _asInt(j['id']),
+        name: j['name']?.toString() ?? '',
+        linked: _asBool(j['linked']),
+        active: _asBool(j['active']),
+      );
+}
+
+/// One cell: what one group does with one row for this dealer.
+/// state: 'full' (prices all its brands), 'partial' ([count] of [total]),
+/// 'available' (the group has them but does not price them for this dealer).
+class PricingOverviewCell {
+  final String state;
+  final int count;
+  final int total;
+
+  const PricingOverviewCell({required this.state, required this.count, required this.total});
+
+  factory PricingOverviewCell.fromJson(Map<String, dynamic> j) => PricingOverviewCell(
+        state: j['state']?.toString() ?? '',
+        count: _asInt(j['count']),
+        total: _asInt(j['total']),
+      );
+}
+
+class PricingOverviewRow {
+  final PricingItemKind kind;
+  final PricingGroupItem item;
+  final int brandCount;
+  final int unpricedCount;
+  final Map<int, PricingOverviewCell> cells;
+
+  /// Brand rows: the dealer's current row.
+  final bool hasRow;
+  final String? profitPercentage;
+  final String? sellingProfitPercentage;
+  final String? managedBy;
+  final bool deactivated;
+
+  const PricingOverviewRow({
+    required this.kind,
+    required this.item,
+    required this.brandCount,
+    required this.unpricedCount,
+    required this.cells,
+    this.hasRow = false,
+    this.profitPercentage,
+    this.sellingProfitPercentage,
+    this.managedBy,
+    this.deactivated = false,
+  });
+
+  static PricingOverviewRow? fromJson(Map<String, dynamic> j) {
+    final kind = pricingKindFromApi(j['kind']?.toString());
+    if (kind == null) return null;
+    return PricingOverviewRow(
+      kind: kind,
+      item: PricingGroupItem.fromJson(j),
+      brandCount: _asInt(j['brand_count']),
+      unpricedCount: _asInt(j['unpriced_count']),
+      cells: {
+        for (final c in _asMapList(j['cells'])) _asInt(c['group_id']): PricingOverviewCell.fromJson(c),
+      },
+      hasRow: _asBool(j['has_row']),
+      profitPercentage: _asStrOrNull(j['profit_percentage']),
+      sellingProfitPercentage: _asStrOrNull(j['selling_profit_percentage']),
+      managedBy: _asStrOrNull(j['managed_by']),
+      deactivated: _asBool(j['deactivated']),
+    );
+  }
+}
+
+/// One dealer x every group, item by item.
+class PricingOverview {
+  final List<PricingOverviewGroup> groups;
+  final List<PricingOverviewRow> rows;
+  final int total;
+  final bool canUseCategories;
+
+  const PricingOverview({
+    required this.groups,
+    required this.rows,
+    required this.total,
+    required this.canUseCategories,
+  });
+
+  factory PricingOverview.fromJson(Map<String, dynamic> j) => PricingOverview(
+        groups: _asMapList(j['groups']).map(PricingOverviewGroup.fromJson).toList(),
+        rows: _asMapList(j['rows']).map(PricingOverviewRow.fromJson).whereType<PricingOverviewRow>().toList(),
+        total: _asInt(j['total']),
+        canUseCategories: _asBool(_asMap(j['permissions'])['can_use_categories']),
+      );
+}

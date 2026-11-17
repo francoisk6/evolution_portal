@@ -7,6 +7,7 @@ import '../../../data/models/pricing_group.dart';
 import '../../../services/pricing_group_service.dart';
 import '../../../state/session_provider.dart';
 import 'pricing_group_widgets.dart';
+import 'pricing_overview_grid.dart';
 import 'pricing_rule_grid.dart';
 
 /// Admin › Dealer pricing groups: pick a dealer.
@@ -79,10 +80,7 @@ class _DealerPricingListPageState extends ConsumerState<DealerPricingListPage> {
                 children: [
                   Expanded(
                     child: Text('Dealer pricing groups',
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.w800)),
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
                   ),
                   IconButton(
                     tooltip: 'Refresh',
@@ -121,8 +119,7 @@ class _DealerPricingListPageState extends ConsumerState<DealerPricingListPage> {
               if (_dealers != null && dealers.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 32),
-                  child: Center(
-                      child: Text('No dealers found.', style: TextStyle(color: Colors.grey.shade600))),
+                  child: Center(child: Text('No dealers found.', style: TextStyle(color: Colors.grey.shade600))),
                 ),
               for (final d in dealers)
                 Card(
@@ -139,8 +136,7 @@ class _DealerPricingListPageState extends ConsumerState<DealerPricingListPage> {
                       children: [
                         Flexible(
                           child: Text(d.username,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.w800)),
+                              overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
                         ),
                         if (!d.isActiveUser) ...[
                           const SizedBox(width: 6),
@@ -156,8 +152,7 @@ class _DealerPricingListPageState extends ConsumerState<DealerPricingListPage> {
                               spacing: 6,
                               runSpacing: 4,
                               children: [
-                                for (final g in d.activeGroups)
-                                  PricingInfoChip(g, color: const Color(0xFF2563EB)),
+                                for (final g in d.activeGroups) PricingInfoChip(g, color: const Color(0xFF2563EB)),
                               ],
                             ),
                     ),
@@ -189,6 +184,7 @@ class _DealerPricingGroupsPageState extends State<DealerPricingGroupsPage> {
   final Set<int> _busyGroups = {};
   bool _changed = false;
   String? _error;
+  int _version = 0; // rebuilds the overview after a change
 
   @override
   void initState() {
@@ -204,7 +200,10 @@ class _DealerPricingGroupsPageState extends State<DealerPricingGroupsPage> {
     try {
       final d = await PricingGroupService.instance.dealer(widget.userId);
       if (!mounted) return;
-      setState(() => _detail = d);
+      setState(() {
+        _detail = d;
+        _version++;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = friendlyPricingError(e));
@@ -268,59 +267,83 @@ class _DealerPricingGroupsPageState extends State<DealerPricingGroupsPage> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) Navigator.of(context).pop(_changed);
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(widget.username),
-          actions: [
-            IconButton(
-              tooltip: 'Refresh',
-              onPressed: _loading ? null : _load,
-              icon: const Icon(Icons.refresh),
-            ),
-          ],
-        ),
-        body: _loading && d == null
-            ? const Center(child: CircularProgressIndicator())
-            : PricingPageBody(
+      child: DefaultTabController(
+        length: 2,
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text(widget.username),
+            actions: [
+              IconButton(
+                tooltip: 'Refresh',
+                onPressed: _loading ? null : _load,
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+            bottom: const TabBar(tabs: [Tab(text: 'Groups'), Tab(text: 'Overview')]),
+          ),
+          body: TabBarView(
+            // The overview table scrolls sideways; swiping must not switch tabs.
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              _loading && d == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : PricingPageBody(
+                      child: ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          if (_error != null)
+                            Card(
+                              color: const Color(0xFFFEF2F2),
+                              child: ListTile(
+                                title: Text(_error!),
+                                trailing: TextButton(onPressed: _load, child: const Text('Retry')),
+                              ),
+                            ),
+                          if (d != null) ...[
+                            Text(
+                              [
+                                if (d.user.fullName.isNotEmpty) d.user.fullName,
+                                if (!d.user.isActiveUser) 'inactive user (groups still apply)',
+                              ].join(' · '),
+                              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Turn on the groups this dealer should follow. Two groups that are on may not give the '
+                              'same item - when they would, you choose which group keeps it.',
+                              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+                            ),
+                            const SizedBox(height: 12),
+                            if (d.groups.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 32),
+                                child: Center(
+                                  child: Text('No pricing groups exist yet.',
+                                      style: TextStyle(color: Colors.grey.shade600)),
+                                ),
+                              ),
+                            for (final link in d.groups) _linkCard(link),
+                          ],
+                        ],
+                      ),
+                    ),
+              PricingPageBody(
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    if (_error != null)
-                      Card(
-                        color: const Color(0xFFFEF2F2),
-                        child: ListTile(
-                          title: Text(_error!),
-                          trailing: TextButton(onPressed: _load, child: const Text('Retry')),
-                        ),
-                      ),
-                    if (d != null) ...[
-                      Text(
-                        [
-                          if (d.user.fullName.isNotEmpty) d.user.fullName,
-                          if (!d.user.isActiveUser) 'inactive user (groups still apply)',
-                        ].join(' · '),
-                        style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Turn on the groups this dealer should follow. Two groups that are on may not give the '
-                        'same item - when they would, you choose which group keeps it.',
-                        style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
-                      ),
-                      const SizedBox(height: 12),
-                      if (d.groups.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 32),
-                          child: Center(
-                            child: Text('No pricing groups exist yet.',
-                                style: TextStyle(color: Colors.grey.shade600)),
-                          ),
-                        ),
-                      for (final link in d.groups) _linkCard(link),
-                    ],
+                    Text(
+                      'Every item and the group that prices it for ${widget.username}. '
+                      'Tap a category or product to open what is inside.',
+                      style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+                    ),
+                    const SizedBox(height: 12),
+                    PricingOverviewGrid(key: ValueKey(_version), userId: widget.userId),
                   ],
                 ),
               ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -345,8 +368,7 @@ class _DealerPricingGroupsPageState extends State<DealerPricingGroupsPage> {
             Row(
               children: [
                 Expanded(
-                  child: Text(link.group.name,
-                      style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w900)),
+                  child: Text(link.group.name, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w900)),
                 ),
                 if (busy)
                   const Padding(

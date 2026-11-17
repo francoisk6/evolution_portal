@@ -120,6 +120,28 @@ class PricingGroupService {
         .toList();
   }
 
+  /// `type`: 'all', 'category', 'product' or 'brand'.
+  Future<PricingOverview> overview(
+    int userId, {
+    String type = 'all',
+    String? search,
+    bool unpricedOnly = false,
+    int limit = 50,
+    int offset = 0,
+    int? categoryId,
+    List<int>? productIds,
+  }) async =>
+      PricingOverview.fromJson(await _api.getPricingGroupDealerOverview(
+        userId,
+        type: type,
+        search: search,
+        unpricedOnly: unpricedOnly,
+        limit: limit,
+        offset: offset,
+        categoryId: categoryId,
+        productIds: productIds,
+      ));
+
   Future<PricingUserDetail> dealer(int userId) async =>
       PricingUserDetail.fromJson(await _api.getPricingGroupDealer(userId));
 
