@@ -71,6 +71,19 @@ class AppEnv {
   /// - API host aliases below are also accepted for safety.
   static const String webRootHost = 'evolution-portal.com';
 
+  /// Custom web domains that serve one workspace's web app from outside
+  /// [webRootHost]. Each pins the session to its workspace and talks to the API
+  /// host on its own domain rather than the registry's evolution-portal.com one.
+  static const Map<String, WorkspaceConfig> _customWebHosts = {
+    '81212800.net': _onlineCellphonesCustomHost,
+    'www.81212800.net': _onlineCellphonesCustomHost,
+  };
+  static const WorkspaceConfig _onlineCellphonesCustomHost = WorkspaceConfig(
+    slug: 'onlinecellphones',
+    displayName: 'On-line-Cellphones',
+    apiBaseUrl: 'https://api.81212800.net',
+  );
+
   // Android emulator can't reach the host via 'localhost' — use 10.0.2.2.
   // Physical Android device: change this to your machine's LAN IP instead.
   static String get _devHost {
@@ -203,6 +216,16 @@ class AppEnv {
     // Restore the last known list, so a cold start with no network still offers
     // whatever was available last time instead of collapsing to Main.
     await _loadCachedWorkspaces();
+
+    // A custom domain names its workspace and API host outright: nothing to
+    // resolve, so a first visit does not wait on the network.
+    final customHostWorkspace = _customWebHostWorkspace();
+    if (customHostWorkspace != null) {
+      _pendingHostSlug = null;
+      _selectedWorkspace = customHostWorkspace;
+      _webHostWorkspaceLocked = true;
+      return;
+    }
 
     // A <slug>.evolution-portal.com host names its workspace even when that
     // slug is not in the list yet, which is the normal case on a browser that
@@ -368,6 +391,15 @@ class AppEnv {
   /// picking up any change to its base URL. Falls back to the first entry when
   /// the selected workspace is gone from the list.
   static void _reconcileSelection() {
+    // A custom domain keeps its own API host; the registry entry for the same
+    // slug carries the evolution-portal.com one.
+    final customHostWorkspace = _customWebHostWorkspace();
+    if (customHostWorkspace != null) {
+      _selectedWorkspace = customHostWorkspace;
+      _webHostWorkspaceLocked = true;
+      return;
+    }
+
     // A host-pinned session follows its host, not whatever happened to be
     // selected while the slug was still unresolvable.
     final pendingSlug = _pendingHostSlug;
@@ -410,6 +442,22 @@ class AppEnv {
       if (workspace.slug.toLowerCase() == normalized) return workspace;
     }
     return null;
+  }
+
+  /// Workspace pinned by a custom web domain, or null on any other host.
+  ///
+  /// Slug and API host are fixed by [_customWebHosts]; the display name follows
+  /// the registry when it knows the workspace, so a rename there still shows.
+  static WorkspaceConfig? _customWebHostWorkspace() {
+    if (!kIsWeb) return null;
+    final pinned = _customWebHosts[Uri.base.host.trim().toLowerCase()];
+    if (pinned == null) return null;
+    final known = workspaceBySlug(pinned.slug);
+    return WorkspaceConfig(
+      slug: pinned.slug,
+      displayName: known?.displayName ?? pinned.displayName,
+      apiBaseUrl: pinned.apiBaseUrl,
+    );
   }
 
   static WorkspaceConfig? _workspaceFromCurrentWebHost() {
