@@ -85,6 +85,11 @@ class OnlinePurchaseOrderData {
   final bool disableQuantity;
 
   final List<String> params;
+
+  /// Display-only labels for [params], same order (backend `params_descr`).
+  /// Empty when the backend sends none or an older backend omits the key.
+  /// Values are ALWAYS keyed by the original [params] entry, never by these.
+  final List<String> paramsDescr;
   final Map<String, dynamic> paramsDefaults;
 
   final Map<String, dynamic> criteriaInfo;
@@ -105,11 +110,22 @@ class OnlinePurchaseOrderData {
     required this.quantityValues,
     required this.disableQuantity,
     required this.params,
+    this.paramsDescr = const [],
     required this.paramsDefaults,
     required this.criteriaInfo,
     required this.totals,
     required this.cvNoteJson,
   });
+
+  /// The admin's display label for [param], or null when it has none (no
+  /// override, a blank entry, or a list that doesn't line up with [params]).
+  String? descrFor(String param) {
+    if (paramsDescr.length != params.length) return null;
+    final i = params.indexOf(param);
+    if (i < 0) return null;
+    final d = paramsDescr[i].trim();
+    return d.isEmpty ? null : d;
+  }
 
   static int _asInt(dynamic v) =>
       v is int ? v : int.tryParse(v?.toString() ?? '') ?? 0;
@@ -145,6 +161,9 @@ class OnlinePurchaseOrderData {
       disableQuantity: _asBool(j['disable_quantity']),
       params: (j['params'] as List? ?? const [])
           .map((e) => e.toString())
+          .toList(growable: false),
+      paramsDescr: (j['params_descr'] as List? ?? const [])
+          .map((e) => e?.toString() ?? '')
           .toList(growable: false),
       paramsDefaults: (j['params_defaults'] is Map)
           ? (j['params_defaults'] as Map).cast<String, dynamic>()

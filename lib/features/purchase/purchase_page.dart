@@ -798,6 +798,12 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
     return titled;
   }
 
+  /// Label shown for a param: the admin's `params_descr` override verbatim
+  /// when set, else the prettified param name. Only the label changes - the
+  /// value is still stored and sent under the original [param] key.
+  String _paramLabel(OnlinePurchaseOrderData data, String param) =>
+      data.descrFor(param) ?? _prettyLabel(param);
+
   TextInputType _paramKeyboardType(String paramName) {
     final low = paramName.toLowerCase();
     if (low.contains('phone') ||
@@ -1738,7 +1744,7 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                                   fontWeight: FontWeight.w700,
                                   color: Colors.grey.shade600)),
                         ),
-                        Text(_prettyLabel(dataKey),
+                        Text(_paramLabel(data, dataKey),
                             style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
@@ -2007,15 +2013,15 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
         leftChildren.add(const SizedBox(height: 10));
         leftChildren.add(
           _topLabel(
-            _prettyLabel(p),
+            _paramLabel(data, p),
             HistoryTextField(
               historyKey: _historyKeyForParam(p),
               controller: ctl,
               textInputAction: TextInputAction.next,
-              keyboardType: _paramKeyboardType(p),
+              keyboardType: _paramKeyboardType(data.descrFor(p) ?? p),
               style: const TextStyle(fontSize: _fsBase),
               decoration: _dec(
-                hint: _prettyLabel(p),
+                hint: _paramLabel(data, p),
                 hasValue: ctl.text.trim().isNotEmpty,
                 requiredField: true,
                 suffix: _lookupSuffixBtn(
