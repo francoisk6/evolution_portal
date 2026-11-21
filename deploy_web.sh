@@ -38,8 +38,8 @@ log "Flutter clean..."
 log "Flutter pub get..."
 "$FLUTTER_BIN" pub get
 
-log "Flutter build web --release --pwa-strategy=none --no-tree-shake-icons..."
-"$FLUTTER_BIN" build web --release --pwa-strategy=none --no-tree-shake-icons
+log "Flutter build web --release --pwa-strategy=none..."
+"$FLUTTER_BIN" build web --release --pwa-strategy=none
 
 log "Writing deployed version file..."
 printf '%s\n' "$APP_VERSION" > build/web/app_version.txt
