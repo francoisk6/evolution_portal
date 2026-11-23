@@ -1825,10 +1825,17 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
   String _validityFingerprint(OnlinePurchaseOrderData data) =>
       '${data.brand.id}|${data.validityParams.map((p) => (_paramCtrls[p]?.text ?? '').trim()).join('|')}';
 
-  /// True when the brand needs no check, or the current values passed one.
-  bool _validityPassed(OnlinePurchaseOrderData data) =>
-      !data.validityCheck ||
-      (_validityValid == true && _validityKey == _validityFingerprint(data));
+  /// Whether Buy may proceed. No check, or a non-blocking check (backend
+  /// `validity_blocking: false`, Validate is optional): always. Blocking:
+  /// only once the current values passed a check.
+  bool _validityPassed(OnlinePurchaseOrderData data) {
+    if (!data.validityCheck || !data.validityBlocking) return true;
+    return _validityOk(data);
+  }
+
+  /// The current values got a valid (green or amber) answer.
+  bool _validityOk(OnlinePurchaseOrderData data) =>
+      _validityValid == true && _validityKey == _validityFingerprint(data);
 
   void _clearValidityIfStale(OnlinePurchaseOrderData data) {
     if (_validityKey == null) return;
@@ -1891,7 +1898,8 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
   /// The first validity param's field with the Validate button on its right
   /// and the result (or a reminder) underneath.
   Widget _withValidity(OnlinePurchaseOrderData data, Widget field) {
-    final passed = _validityPassed(data);
+    // A red result keeps the button enabled so the dealer can re-check.
+    final passed = _validityOk(data);
     final hasResult = _validityMessage != null &&
         _validityKey == _validityFingerprint(data);
 
@@ -1921,7 +1929,9 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
       );
     } else {
       status = Text(
-        'Press Validate before buying.',
+        data.validityBlocking
+            ? 'Press Validate before buying.'
+            : 'Optional: press Validate to check the ID.',
         style: TextStyle(fontSize: _fsLabel, color: Colors.grey.shade600),
       );
     }

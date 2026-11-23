@@ -99,6 +99,10 @@ class OnlinePurchaseOrderData {
 
   /// The params the check sends, player first (e.g. ["Player ID", "Zone ID"]).
   final List<String> validityParams;
+
+  /// Backend `validity_blocking`: when false, a failed check only warns and
+  /// Buy unlocks once the dealer has pressed Validate. True when absent.
+  final bool validityBlocking;
   final Map<String, dynamic> paramsDefaults;
 
   final Map<String, dynamic> criteriaInfo;
@@ -122,6 +126,7 @@ class OnlinePurchaseOrderData {
     this.paramsDescr = const [],
     this.validityCheck = false,
     this.validityParams = const [],
+    this.validityBlocking = true,
     required this.paramsDefaults,
     required this.criteriaInfo,
     required this.totals,
@@ -181,6 +186,7 @@ class OnlinePurchaseOrderData {
       params: params,
       validityCheck: _asBool(j['validity_check']) && validityParams.isNotEmpty,
       validityParams: validityParams,
+      validityBlocking: j['validity_blocking'] != false,
       paramsDescr: (j['params_descr'] as List? ?? const [])
           .map((e) => e?.toString() ?? '')
           .toList(growable: false),
