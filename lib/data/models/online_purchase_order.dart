@@ -90,6 +90,15 @@ class OnlinePurchaseOrderData {
   /// Empty when the backend sends none or an older backend omits the key.
   /// Values are ALWAYS keyed by the original [params] entry, never by these.
   final List<String> paramsDescr;
+
+  /// Backend `validity_check`: the brand's player/account ID can be checked
+  /// with the provider. The page shows a "Validate" button on the first of
+  /// [validityParams] and requires a successful check before buying.
+  /// False on older backends (key absent).
+  final bool validityCheck;
+
+  /// The params the check sends, player first (e.g. ["Player ID", "Zone ID"]).
+  final List<String> validityParams;
   final Map<String, dynamic> paramsDefaults;
 
   final Map<String, dynamic> criteriaInfo;
@@ -111,6 +120,8 @@ class OnlinePurchaseOrderData {
     required this.disableQuantity,
     required this.params,
     this.paramsDescr = const [],
+    this.validityCheck = false,
+    this.validityParams = const [],
     required this.paramsDefaults,
     required this.criteriaInfo,
     required this.totals,
@@ -142,6 +153,14 @@ class OnlinePurchaseOrderData {
   factory OnlinePurchaseOrderData.fromJson(Map<String, dynamic> j) {
     final brandRaw = j['brand'];
     final totalsRaw = j['totals'];
+    final params = (j['params'] as List? ?? const [])
+        .map((e) => e.toString())
+        .toList(growable: false);
+    // Only params the form actually shows can be checked.
+    final validityParams = (j['validity_params'] as List? ?? const [])
+        .map((e) => e.toString())
+        .where(params.contains)
+        .toList(growable: false);
 
     return OnlinePurchaseOrderData(
       currency: (j['currency'] ?? '').toString(),
@@ -159,9 +178,9 @@ class OnlinePurchaseOrderData {
           .map((e) => e.toString())
           .toList(growable: false),
       disableQuantity: _asBool(j['disable_quantity']),
-      params: (j['params'] as List? ?? const [])
-          .map((e) => e.toString())
-          .toList(growable: false),
+      params: params,
+      validityCheck: _asBool(j['validity_check']) && validityParams.isNotEmpty,
+      validityParams: validityParams,
       paramsDescr: (j['params_descr'] as List? ?? const [])
           .map((e) => e?.toString() ?? '')
           .toList(growable: false),

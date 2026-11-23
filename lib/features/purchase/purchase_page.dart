@@ -58,6 +58,14 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
   bool _loading = false;
   bool _posting = false;
   bool _lookupBusy = false;
+
+  // "Validate" button (brands with validity_check). The result belongs to the
+  // values fingerprinted in _validityKey; buying needs a successful check of
+  // the CURRENT values, so editing a checked field clears it.
+  bool _validityBusy = false;
+  String? _validityKey;
+  bool? _validityValid;
+  String? _validityMessage;
   String? _error;
   bool _showPriceDetails = true;
 
@@ -1159,6 +1167,11 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
       params[e.key] = v;
     }
 
+    if (!_validityPassed(data)) {
+      _snack('Press Validate first.', error: true);
+      return;
+    }
+
     final currency =
         _activeCurrency ?? _currencyCode(ref.read(currencyProvider));
     final usePinOnOrder = ref.read(sessionProvider).usePinOnOrder;
@@ -1804,6 +1817,137 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
     );
   }
 
+  // ───────────────────── validity check ─────────────────────
+
+  String _validityFingerprint(OnlinePurchaseOrderData data) =>
+      '${data.brand.id}|${data.validityParams.map((p) => (_paramCtrls[p]?.text ?? '').trim()).join('|')}';
+
+  /// True when the brand needs no check, or the current values passed one.
+  bool _validityPassed(OnlinePurchaseOrderData data) =>
+      !data.validityCheck ||
+      (_validityValid == true && _validityKey == _validityFingerprint(data));
+
+  void _clearValidityIfStale(OnlinePurchaseOrderData data) {
+    if (_validityKey == null) return;
+    if (_validityKey == _validityFingerprint(data)) return;
+    _validityKey = null;
+    _validityValid = null;
+    _validityMessage = null;
+  }
+
+  Future<void> _runValidityCheck(OnlinePurchaseOrderData data) async {
+    if (_validityBusy) return;
+    final params = <String, String>{};
+    for (final p in data.validityParams) {
+      final v = (_paramCtrls[p]?.text ?? '').trim();
+      if (v.isEmpty) {
+        _snack('Missing: ${_paramLabel(data, p)}', error: true);
+        return;
+      }
+      params[p] = v;
+    }
+
+    final key = _validityFingerprint(data);
+    setState(() {
+      _validityBusy = true;
+      _validityKey = key;
+      _validityValid = null;
+      _validityMessage = null;
+    });
+    try {
+      final body = await ApiService.instance.postOnlinePurchaseValidityCheck(
+        brandId: data.brand.id,
+        params: params,
+      );
+      // The dealer edited the field while we were waiting: drop the answer.
+      if (!mounted || _validityKey != key) return;
+      final d = body['data'] is Map ? body['data'] as Map : const {};
+      final valid = body['success'] == true && d['valid'] == true;
+      var msg = (body['message'] ?? '').toString().trim();
+      if (msg.isEmpty) msg = valid ? 'Valid' : 'Not valid';
+      setState(() {
+        _validityValid = valid;
+        _validityMessage = msg;
+      });
+    } catch (e) {
+      if (!mounted || _validityKey != key) return;
+      setState(() {
+        _validityValid = false;
+        _validityMessage = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (mounted) setState(() => _validityBusy = false);
+    }
+  }
+
+  /// The first validity param's field with the Validate button on its right
+  /// and the result (or a reminder) underneath.
+  Widget _withValidity(OnlinePurchaseOrderData data, Widget field) {
+    final passed = _validityPassed(data);
+    final hasResult = _validityMessage != null &&
+        _validityKey == _validityFingerprint(data);
+
+    Widget status;
+    if (hasResult) {
+      final ok = _validityValid == true;
+      final color = ok ? Colors.green.shade700 : Colors.red.shade700;
+      status = Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(ok ? Icons.check_circle : Icons.error_outline,
+              size: 15, color: color),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              _validityMessage!,
+              style: TextStyle(fontSize: _fsLabel, color: color),
+            ),
+          ),
+        ],
+      );
+    } else {
+      status = Text(
+        'Press Validate before buying.',
+        style: TextStyle(fontSize: _fsLabel, color: Colors.grey.shade600),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: field),
+            const SizedBox(width: 8),
+            SizedBox(
+              height: 40,
+              child: OutlinedButton(
+                onPressed: _validityBusy || passed
+                    ? null
+                    : () => _runValidityCheck(data),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: _validityBusy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 1.5),
+                      )
+                    : Text(passed ? 'Validated' : 'Validate',
+                        style: const TextStyle(fontSize: _fsBase)),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        status,
+      ],
+    );
+  }
+
   Widget _lookupSuffixBtn({
     required OnlinePurchaseOrderData data,
     required String dataKey,
@@ -1885,8 +2029,11 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
 
     // Superusers and staff may browse brands/prices but cannot purchase.
     final purchaseDenied = ref.watch(sessionProvider).isAdmin;
-    final nextEnabled =
-        !_posting && !_loading && _order != null && !purchaseDenied;
+    final nextEnabled = !_posting &&
+        !_loading &&
+        _order != null &&
+        !purchaseDenied &&
+        _validityPassed(_order!);
 
     // Prefer returning to the exact previous location (brands tab + query params)
     // rather than a hard-coded route that may require path params.
@@ -2010,35 +2157,42 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
           c.addListener(_persistPurchaseFlow);
           return c;
         });
+        final validityField = data.validityCheck &&
+            data.validityParams.isNotEmpty &&
+            data.validityParams.first == p;
+        final paramField = HistoryTextField(
+          historyKey: _historyKeyForParam(p),
+          controller: ctl,
+          textInputAction: TextInputAction.next,
+          keyboardType: _paramKeyboardType(data.descrFor(p) ?? p),
+          style: const TextStyle(fontSize: _fsBase),
+          decoration: _dec(
+            hint: _paramLabel(data, p),
+            hasValue: ctl.text.trim().isNotEmpty,
+            requiredField: true,
+            suffix: _lookupSuffixBtn(
+              data: data,
+              dataKey: p,
+              targetCtrl: ctl,
+            ),
+          ),
+          onChanged: (_) {
+            if (data.validityParams.contains(p)) {
+              _clearValidityIfStale(data);
+            }
+            if (_isCableVisionSlaveRefillBrand(data) &&
+                _isSlaveQuantityParam(p)) {
+              _refreshDisplayedPricing(data);
+              return;
+            }
+            setState(() {});
+          },
+        );
         leftChildren.add(const SizedBox(height: 10));
         leftChildren.add(
           _topLabel(
             _paramLabel(data, p),
-            HistoryTextField(
-              historyKey: _historyKeyForParam(p),
-              controller: ctl,
-              textInputAction: TextInputAction.next,
-              keyboardType: _paramKeyboardType(data.descrFor(p) ?? p),
-              style: const TextStyle(fontSize: _fsBase),
-              decoration: _dec(
-                hint: _paramLabel(data, p),
-                hasValue: ctl.text.trim().isNotEmpty,
-                requiredField: true,
-                suffix: _lookupSuffixBtn(
-                  data: data,
-                  dataKey: p,
-                  targetCtrl: ctl,
-                ),
-              ),
-              onChanged: (_) {
-                if (_isCableVisionSlaveRefillBrand(data) &&
-                    _isSlaveQuantityParam(p)) {
-                  _refreshDisplayedPricing(data);
-                  return;
-                }
-                setState(() {});
-              },
-            ),
+            validityField ? _withValidity(data, paramField) : paramField,
           ),
         );
       }

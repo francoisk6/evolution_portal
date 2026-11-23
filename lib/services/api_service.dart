@@ -1551,6 +1551,57 @@ class ApiService {
     throw Exception('Unexpected purchase response shape.');
   }
 
+  /// POST /api/account/online-purchase/validity-check/
+  ///
+  /// The purchase page's "Validate" button: checks the player/account ID with
+  /// the provider. Returns the JSON body for every status (400 = missing input
+  /// or provider unavailable, 429 = too many checks) so the caller can show
+  /// `message`; only a 401 throws. On success: data = {valid, name, message}.
+  Future<Map<String, dynamic>> postOnlinePurchaseValidityCheck({
+    required int brandId,
+    required Map<String, String> params,
+  }) async {
+    await _ensureTokenLoaded();
+    if (_token == null || _token!.isEmpty) {
+      await _forceReloadToken();
+    }
+
+    final url =
+        Uri.parse('${AppEnv.base}account/online-purchase/validity-check/');
+
+    final res = await http.post(
+      url,
+      headers: _jsonHeaders(auth: true),
+      body: jsonEncode({'brand_id': brandId, 'params': params}),
+    );
+
+    if (res.statusCode == 401) {
+      await logout();
+      throw Exception('Session expired. Please login again.');
+    }
+    _throwIfMaintenance(res.statusCode);
+
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(_bodyText(res));
+    } catch (_) {
+      decoded = null;
+    }
+    if (decoded is Map) {
+      final body = decoded.cast<String, dynamic>();
+      if ((body['message'] ?? '').toString().trim().isEmpty) {
+        body['message'] = res.statusCode == 429
+            ? 'Too many checks. Please wait a minute.'
+            : 'The ID check failed (HTTP ${res.statusCode}).';
+      }
+      return body;
+    }
+    return <String, dynamic>{
+      'success': false,
+      'message': 'The ID check failed (HTTP ${res.statusCode}).',
+    };
+  }
+
   /// POST /api/account/online-purchase/order-check/
   ///
   /// IMPORTANT: this endpoint can return HTTP 400 with a valid JSON body
