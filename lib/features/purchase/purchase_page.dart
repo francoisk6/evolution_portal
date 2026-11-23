@@ -65,6 +65,9 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
   bool _validityBusy = false;
   String? _validityKey;
   bool? _validityValid;
+  // False when the provider answered but can't check this service's IDs
+  // (e.g. "Name check not configured"): buying is allowed, shown in amber.
+  bool _validityChecked = true;
   String? _validityMessage;
   String? _error;
   bool _showPriceDetails = true;
@@ -1832,6 +1835,7 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
     if (_validityKey == _validityFingerprint(data)) return;
     _validityKey = null;
     _validityValid = null;
+    _validityChecked = true;
     _validityMessage = null;
   }
 
@@ -1852,6 +1856,7 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
       _validityBusy = true;
       _validityKey = key;
       _validityValid = null;
+      _validityChecked = true;
       _validityMessage = null;
     });
     try {
@@ -1863,10 +1868,13 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
       if (!mounted || _validityKey != key) return;
       final d = body['data'] is Map ? body['data'] as Map : const {};
       final valid = body['success'] == true && d['valid'] == true;
+      // Older backends send no `checked`: treat their answer as a real check.
+      final checked = d['checked'] != false;
       var msg = (body['message'] ?? '').toString().trim();
       if (msg.isEmpty) msg = valid ? 'Valid' : 'Not valid';
       setState(() {
         _validityValid = valid;
+        _validityChecked = checked;
         _validityMessage = msg;
       });
     } catch (e) {
@@ -1890,12 +1898,18 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
     Widget status;
     if (hasResult) {
       final ok = _validityValid == true;
-      final color = ok ? Colors.green.shade700 : Colors.red.shade700;
+      // Amber: the provider answered but can't check IDs for this service.
+      final unchecked = ok && !_validityChecked;
+      final color = unchecked
+          ? Colors.orange.shade800
+          : (ok ? Colors.green.shade700 : Colors.red.shade700);
+      final icon = unchecked
+          ? Icons.info_outline
+          : (ok ? Icons.check_circle : Icons.error_outline);
       status = Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(ok ? Icons.check_circle : Icons.error_outline,
-              size: 15, color: color),
+          Icon(icon, size: 15, color: color),
           const SizedBox(width: 4),
           Expanded(
             child: Text(
@@ -1936,7 +1950,10 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 1.5),
                       )
-                    : Text(passed ? 'Validated' : 'Validate',
+                    : Text(
+                        passed
+                            ? (_validityChecked ? 'Validated' : 'Checked')
+                            : 'Validate',
                         style: const TextStyle(fontSize: _fsBase)),
               ),
             ),
