@@ -73,6 +73,12 @@ const List<CatalogTarget> kCatalogTargets = <CatalogTarget>[
     icon: Icons.account_balance_wallet_outlined,
     timeout: Duration(seconds: 120),
   ),
+  CatalogTarget(
+    key: 'mediamoney',
+    label: 'MediaMoneyStore',
+    icon: Icons.storefront_outlined,
+    timeout: Duration(seconds: 300),
+  ),
 ];
 
 /// Result of a single catalog-update run.
