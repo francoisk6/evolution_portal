@@ -571,6 +571,24 @@ class TransactionListItem {
     this.reconciliation,
   });
 
+  /// Same row with a new status (light status refresh); everything else kept.
+  TransactionListItem withStatus(String next) {
+    return TransactionListItem(
+      id: id,
+      ts: ts,
+      username: username,
+      currency: currency,
+      quantity: quantity,
+      status: next,
+      client: client,
+      amounts: amounts,
+      context: context,
+      balance: balance,
+      ui: ui,
+      reconciliation: reconciliation,
+    );
+  }
+
   static DateTime _parseTs(dynamic v) {
     if (v == null) return DateTime.now();
     try {

@@ -1832,6 +1832,18 @@ class ApiService {
     return _getJsonMap(url, auth: true);
   }
 
+  /// GET /api/account/transactions/status/?ids=1,2,3
+  ///
+  /// Returns { items: [{id, status}] } — current status only, for refreshing
+  /// rows still in progress without reloading the list.
+  Future<Map<String, dynamic>> getTransactionStatuses({
+    required List<int> ids,
+  }) async {
+    final url = Uri.parse('${AppEnv.base}account/transactions/status/')
+        .replace(queryParameters: {'ids': ids.join(',')});
+    return _getJsonMap(url, auth: true);
+  }
+
   /// GET /api/account/transactions/<id>/
   Future<Map<String, dynamic>> getTransactionDetail({
     required int id,

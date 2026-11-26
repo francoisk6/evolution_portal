@@ -169,6 +169,44 @@ class TransactionHistoryNotifier extends StateNotifier<TransactionHistoryState> 
 
   Future<void> refresh() async => fetch(reset: true);
 
+  /// Statuses the backend may still move (sweep / order check).
+  static const inProgressStatuses = {'wait', 'pending', 'initiated'};
+
+  bool get hasInProgressItems => state.items
+      .any((e) => inProgressStatuses.contains(e.status.trim().toLowerCase()));
+
+  /// Light refresh: asks only for the status of rows still in progress and
+  /// patches those rows in place. The list, its pages and the summary are
+  /// left as they are. Errors are swallowed (an older backend without the
+  /// endpoint just means no live updates).
+  Future<void> refreshInProgressStatuses() async {
+    if (state.loading) return;
+    final ids = state.items
+        .where((e) =>
+            inProgressStatuses.contains(e.status.trim().toLowerCase()))
+        .map((e) => e.id)
+        .take(200)
+        .toList();
+    if (ids.isEmpty) return;
+
+    final Map<int, String> fresh;
+    try {
+      fresh = await TransactionService.instance.statuses(ids);
+    } catch (_) {
+      return;
+    }
+    if (!mounted || fresh.isEmpty) return;
+
+    var changed = false;
+    final next = state.items.map((e) {
+      final s = fresh[e.id];
+      if (s == null || s == e.status) return e;
+      changed = true;
+      return e.withStatus(s);
+    }).toList();
+    if (changed) state = state.copyWith(items: next);
+  }
+
   Future<void> fetchMore() async {
     if (!state.hasMore || state.isLoadingMore || state.isInitialLoading) return;
     await fetch(reset: false);

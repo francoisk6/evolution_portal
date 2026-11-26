@@ -44,6 +44,25 @@ class TransactionService {
     return TransactionListResponse.fromJson(m);
   }
 
+  /// Current status per transaction id. Ids the server doesn't return
+  /// (not visible to this user) are simply absent.
+  Future<Map<int, String>> statuses(List<int> ids) async {
+    if (ids.isEmpty) return const {};
+    final m = await ApiService.instance.getTransactionStatuses(ids: ids);
+    final out = <int, String>{};
+    final items = m['items'];
+    if (items is List) {
+      for (final it in items) {
+        if (it is! Map) continue;
+        final id = int.tryParse('${it['id'] ?? ''}');
+        final status = it['status'];
+        if (id == null || status == null) continue;
+        out[id] = status.toString();
+      }
+    }
+    return out;
+  }
+
   Future<TransactionDetail> detail(int id, {bool includeBalance = false}) async {
     final m = await ApiService.instance.getTransactionDetail(
       id: id,

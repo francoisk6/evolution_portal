@@ -356,10 +356,27 @@ class _TransactionHistoryPageState
 
     Future.microtask(
         () => ref.read(transactionHistoryProvider.notifier).refresh());
+
+    _statusTimer =
+        Timer.periodic(_statusRefreshEvery, (_) => _refreshInProgressStatuses());
+  }
+
+  // Rows still in progress (wait / pending / initiated) get their status
+  // re-read in place while this page is on screen. No-op when none are.
+  static const _statusRefreshEvery = Duration(seconds: 60);
+  Timer? _statusTimer;
+
+  void _refreshInProgressStatuses() {
+    if (!mounted) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+    final notifier = ref.read(transactionHistoryProvider.notifier);
+    if (!notifier.hasInProgressItems) return;
+    notifier.refreshInProgressStatuses();
   }
 
   @override
   void dispose() {
+    _statusTimer?.cancel();
     _vCardsCtl.dispose();
     _vGridCtl.dispose();
     _hSummaryCtl.dispose();
