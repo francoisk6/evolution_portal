@@ -122,6 +122,21 @@ class BatchRecordsNotifier
     );
   }
 
+  /// Mirrors the server: every selected row except Pending gets [status].
+  Future<Map<String, dynamic>> bulkSetStatus(
+      List<int> ids, String status) async {
+    final res = await BatchRefillService.instance.bulkSetStatus(ids, status);
+    final idSet = ids.toSet();
+    state = AsyncData(
+      (state.value ?? [])
+          .map((r) => idSet.contains(r.id) && r.clientActive != 'Pending'
+              ? r.copyWith(clientActive: status)
+              : r)
+          .toList(),
+    );
+    return res;
+  }
+
   Future<BatchCheckResult> checkSheet() async {
     final result = await BatchRefillService.instance.checkSheet(arg);
     final current = state.value ?? [];

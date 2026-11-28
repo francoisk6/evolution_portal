@@ -50,6 +50,10 @@ const _kStatuses = ['Inactive', 'Info', 'Refill', 'Refilled'];
 
 Color _statusFg(String s) {
   switch (s) {
+    case 'Pending':
+      return Colors.purple.shade700;
+    case 'Error':
+      return Colors.red.shade700;
     case 'Refilled':
       return Colors.green.shade700;
     case 'Refill':
@@ -63,6 +67,10 @@ Color _statusFg(String s) {
 
 Color _statusBg(String s) {
   switch (s) {
+    case 'Pending':
+      return Colors.purple.shade50;
+    case 'Error':
+      return Colors.red.shade50;
     case 'Refilled':
       return Colors.green.shade50;
     case 'Refill':
@@ -201,6 +209,102 @@ class _BatchGridPageState extends ConsumerState<BatchGridPage> {
       });
       if (!mounted) return;
       showSuccess(context, 'Moved to "${dest.name}".');
+    } catch (e) {
+      if (!mounted) return;
+      showCaughtError(context, e);
+    }
+  }
+
+  void _toggleSelectAll(List<BatchRecord> records) {
+    final all =
+        records.isNotEmpty && records.every((r) => _selected.contains(r.id));
+    setState(() {
+      _selected.clear();
+      if (!all) _selected.addAll(records.map((r) => r.id));
+    });
+  }
+
+  Future<void> _setActiveSelected(List<BatchRecord> records) async {
+    if (_selected.isEmpty) return;
+    // Save any half-typed cell first so the bulk change doesn't race it.
+    FocusScope.of(context).unfocus();
+    final chosen = records.where((r) => _selected.contains(r.id)).toList();
+    final pending = chosen.where((r) => r.clientActive == 'Pending').length;
+    final n = chosen.length;
+
+    final status = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text(
+                'Set $n selected row${n == 1 ? '' : 's'} to:',
+                style: Theme.of(ctx).textTheme.titleMedium,
+              ),
+            ),
+            for (final s in _kStatuses)
+              Builder(builder: (_) {
+                final changes = chosen
+                    .where((r) =>
+                        r.clientActive != s && r.clientActive != 'Pending')
+                    .length;
+                return ListTile(
+                  enabled: changes > 0,
+                  leading: Icon(Icons.circle, size: 14, color: _statusFg(s)),
+                  title: Text(s,
+                      style: TextStyle(
+                          color: changes > 0 ? _statusFg(s) : null,
+                          fontWeight: FontWeight.w600)),
+                  subtitle: Text(changes == 0
+                      ? 'Already $s'
+                      : '$changes row${changes == 1 ? '' : 's'} will change'),
+                  onTap: () => Navigator.pop(ctx, s),
+                );
+              }),
+            if (pending > 0)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        size: 16, color: _statusFg('Pending')),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '$pending Pending row${pending == 1 ? '' : 's'} '
+                        'will be kept: an order is already in progress.',
+                        style: Theme.of(ctx).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (status == null || !mounted) return;
+
+    try {
+      final res = await ref
+          .read(batchRecordsProvider(widget.sheetId).notifier)
+          .bulkSetStatus(_selected.toList(), status);
+      if (!mounted) return;
+      int count(String k) => (res[k] as num?)?.toInt() ?? 0;
+      final updated = count('updated');
+      final parts = [
+        '$updated row${updated == 1 ? '' : 's'} set to $status',
+        if (count('skipped_pending') > 0)
+          '${count('skipped_pending')} Pending skipped',
+        if (count('skipped_locked') > 0)
+          '${count('skipped_locked')} locked skipped',
+      ];
+      showSuccess(context, parts.join(' · '));
     } catch (e) {
       if (!mounted) return;
       showCaughtError(context, e);
@@ -377,18 +481,37 @@ class _BatchGridPageState extends ConsumerState<BatchGridPage> {
     final hasInfo = records.any((r) => r.clientActive == 'Info');
     final hasRefill = records.any((r) => r.clientActive == 'Refill');
     final brands = ref.watch(batchBrandsProvider).value ?? [];
+    final allSelected =
+        records.isNotEmpty && records.every((r) => _selected.contains(r.id));
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Batch Refill Grid: ${widget.sheetName}',
+        title: Text(
+            _selectMode
+                ? '${_selected.length} selected'
+                : 'Batch Refill Grid: ${widget.sheetName}',
             overflow: TextOverflow.ellipsis),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: 'Add row',
-            onPressed: busy ? null : _openAddRecord,
-          ),
+          if (!_selectMode)
+            IconButton(
+              icon: const Icon(Icons.add),
+              tooltip: 'Add row',
+              onPressed: busy ? null : _openAddRecord,
+            ),
           if (_selectMode) ...[
+            IconButton(
+              icon: Icon(allSelected ? Icons.deselect : Icons.select_all),
+              tooltip: allSelected ? 'Clear selection' : 'Select all',
+              onPressed:
+                  records.isEmpty ? null : () => _toggleSelectAll(records),
+            ),
+            IconButton(
+              icon: const Icon(Icons.toggle_on_outlined),
+              tooltip: 'Set Active for selected',
+              onPressed: _selected.isEmpty || busy
+                  ? null
+                  : () => _setActiveSelected(records),
+            ),
             IconButton(
               icon: const Icon(Icons.drive_file_move_outline),
               tooltip: 'Move selected',
@@ -494,7 +617,17 @@ class _BatchGridPageState extends ConsumerState<BatchGridPage> {
               height: constraints.maxHeight,
               child: Column(
                 children: [
-                  _Header(),
+                  _Header(
+                    selectMode: _selectMode,
+                    // tristate: true all, false none, null some
+                    allSelected: records.isNotEmpty &&
+                            records.every((r) => _selected.contains(r.id))
+                        ? true
+                        : (records.any((r) => _selected.contains(r.id))
+                            ? null
+                            : false),
+                    onToggleAll: () => _toggleSelectAll(records),
+                  ),
                   const Divider(height: 1, thickness: 1),
                   Expanded(
                     child: records.isEmpty
@@ -544,7 +677,14 @@ class _BatchGridPageState extends ConsumerState<BatchGridPage> {
 // ─── Fixed header row ─────────────────────────────────────────────────────────
 
 class _Header extends StatelessWidget {
-  const _Header();
+  final bool selectMode;
+  final bool? allSelected;
+  final VoidCallback? onToggleAll;
+  const _Header({
+    this.selectMode = false,
+    this.allSelected = false,
+    this.onToggleAll,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -558,8 +698,9 @@ class _Header extends StatelessWidget {
           return SizedBox(
             width: col.width,
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8),
+              padding: col.label == '#' && selectMode
+                  ? EdgeInsets.zero
+                  : const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
                 border: Border(
                     right: BorderSide(color: Colors.grey.shade300)),
@@ -567,12 +708,24 @@ class _Header extends StatelessWidget {
               alignment: col.label == '#'
                   ? Alignment.center
                   : Alignment.centerLeft,
-              child: Text(
-                col.label,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 12),
-                overflow: TextOverflow.ellipsis,
-              ),
+              child: col.label == '#' && selectMode
+                  ? Tooltip(
+                      message: allSelected == true
+                          ? 'Clear selection'
+                          : 'Select all',
+                      child: Checkbox(
+                        tristate: true,
+                        value: allSelected,
+                        onChanged: (_) => onToggleAll?.call(),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    )
+                  : Text(
+                      col.label,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                    ),
             ),
           );
         }).toList(),
@@ -1037,6 +1190,31 @@ class _EditableRowState extends State<_EditableRow> {
   }
 
   Widget _statusCell() {
+    // Pending/Error come from the refill itself and are not in _kStatuses.
+    // Pending is read-only (an order is in flight; Check settles it). Error
+    // stays shown as the current value and can be changed like any status.
+    final items = [
+      if (!_kStatuses.contains(_status)) _status,
+      ..._kStatuses,
+    ];
+    if (_status == 'Pending') {
+      return SizedBox(
+        width: _kCols[10].width,
+        height: _kRowH,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            border:
+                Border(right: BorderSide(color: Colors.grey.shade200)),
+          ),
+          alignment: Alignment.center,
+          child: Tooltip(
+            message: 'Order in progress. Press Check to update it.',
+            child: _StatusChip(status: _status),
+          ),
+        ),
+      );
+    }
     return SizedBox(
       width: _kCols[10].width,
       height: _kRowH,
@@ -1052,10 +1230,10 @@ class _EditableRowState extends State<_EditableRow> {
             value: _status,
             isDense: true,
             style: TextStyle(fontSize: 11, color: _statusFg(_status), fontWeight: FontWeight.w600),
-            selectedItemBuilder: (_) => _kStatuses
+            selectedItemBuilder: (_) => items
                 .map((_) => Center(child: _StatusChip(status: _status)))
                 .toList(),
-            items: _kStatuses
+            items: items
                 .map((s) => DropdownMenuItem(
                       value: s,
                       child: Text(s,

@@ -222,6 +222,18 @@ class BatchRefillService {
     await _post('${_base}records/bulk-delete/', {'record_ids': ids});
   }
 
+  /// Sets client_active on many records in one call. Pending rows are skipped
+  /// server-side. Returns {updated, skipped_pending, skipped_locked}.
+  Future<Map<String, dynamic>> bulkSetStatus(
+      List<int> ids, String status) async {
+    final body = await _post('${_base}records/bulk-status/', {
+      'record_ids': ids,
+      'client_active': status,
+    });
+    final d = body['data'];
+    return d is Map ? d.cast<String, dynamic>() : const <String, dynamic>{};
+  }
+
   Future<void> moveRecords({
     required List<int> ids,
     required int fromSheetId,
