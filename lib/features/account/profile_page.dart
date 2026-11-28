@@ -11,6 +11,7 @@ import '../../app/app_env.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
 import '../../state/currency_provider.dart';
+import '../../state/groups_provider.dart';
 import '../../state/session_provider.dart';
 import '../../utils/notify.dart';
 import '../../utils/pick_avatar.dart';
@@ -47,6 +48,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   int? _uiVersion;
   bool _usePinOnOrder = true;
   bool _hideDealerPrice = false;
+  String _catalogSort = 'default';
 
   bool _pinVisible = false;
   PickedAvatarFile? _pendingAvatar;
@@ -139,6 +141,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     if (v is bool) return v;
     final s = v.toString().trim().toLowerCase();
     return s == 'true' || s == '1' || s == 'yes' || s == 'y';
+  }
+
+  /// Catalog order: 'default' (DB order) or 'most_sold' (own purchases first).
+  String _catalogSortFrom(Map<String, dynamic> me) {
+    final v = (_profileMap(me)['catalog_sort'] ?? me['catalog_sort'])?.toString();
+    return v == 'most_sold' ? 'most_sold' : 'default';
   }
 
   dynamic _defaultCurrencyRaw(Map<String, dynamic> me) =>
@@ -235,6 +243,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     _pinCtl.text = _pin(me);
     _usePinOnOrder = _usePinOnOrderFrom(me);
     _hideDealerPrice = _hideDealerPriceFrom(me);
+    _catalogSort = _catalogSortFrom(me);
 
     final code = _currencyCodeFromRaw(_defaultCurrencyRaw(me), currencies);
     _selectedCurrencyCode = code.isEmpty
@@ -543,6 +552,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     final pinOld = _pin(me);
     final usePinOld = _usePinOnOrderFrom(me);
     final hideDealerPriceOld = _hideDealerPriceFrom(me);
+    final catalogSortOld = _catalogSortFrom(me);
     final currencyOld = _currencyCodeFromRaw(_defaultCurrencyRaw(me), currencies);
     final uiOld = _uiVersionFrom(me);
 
@@ -556,6 +566,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     final String? pinToSend = pinNew.isEmpty ? null : ((pinNew == pinOld) ? null : pinNew);
     final bool? usePinOnOrderToSend = (_usePinOnOrder == usePinOld) ? null : _usePinOnOrder;
     final bool? hideDealerPriceToSend = (_hideDealerPrice == hideDealerPriceOld) ? null : _hideDealerPrice;
+    final String? catalogSortToSend = (_catalogSort == catalogSortOld) ? null : _catalogSort;
     final String? currencyToSend = (currencyNew == currencyOld || currencyNew.isEmpty)
         ? null
         : currencyNew;
@@ -572,6 +583,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             pinToSend != null ||
             usePinOnOrderToSend != null ||
             hideDealerPriceToSend != null ||
+            catalogSortToSend != null ||
             currencyToSend != null ||
             uiToSend != null;
 
@@ -602,6 +614,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           pin: pinToSend,
           usePinOnOrder: usePinOnOrderToSend,
           hideDealerPrice: hideDealerPriceToSend,
+          catalogSort: catalogSortToSend,
           defaultCurrency: currencyToSend,
           uiVersion: uiToSend,
           avatarBytes: file.bytes,
@@ -618,12 +631,18 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           pin: pinToSend,
           usePinOnOrder: usePinOnOrderToSend,
           hideDealerPrice: hideDealerPriceToSend,
+          catalogSort: catalogSortToSend,
           defaultCurrency: currencyToSend,
           uiVersion: uiToSend,
         );
       }
 
       await ref.read(sessionProvider).afterLogin(updated);
+
+      // New catalog order → reload the home groups (tabs/brands refetch on open).
+      if (catalogSortToSend != null) {
+        ref.read(groupsProvider.notifier).refresh();
+      }
 
       if (!mounted) return;
       setState(() {
@@ -733,6 +752,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       bioCtl: _bioCtl,
                       uiVersion: _uiVersion,
                       onUiVersionChanged: (v) => setState(() => _uiVersion = v),
+                      catalogSort: _catalogSort,
+                      onCatalogSortChanged: (v) =>
+                          setState(() => _catalogSort = v ?? 'default'),
                     );
 
                     if (!wide) {
@@ -965,6 +987,8 @@ class _ProfileRightColumn extends StatelessWidget {
   final TextEditingController bioCtl;
   final int? uiVersion;
   final ValueChanged<int?> onUiVersionChanged;
+  final String catalogSort;
+  final ValueChanged<String?> onCatalogSortChanged;
 
   const _ProfileRightColumn({
     required this.onChangePassword,
@@ -972,6 +996,8 @@ class _ProfileRightColumn extends StatelessWidget {
     required this.bioCtl,
     required this.uiVersion,
     required this.onUiVersionChanged,
+    required this.catalogSort,
+    required this.onCatalogSortChanged,
   });
 
   @override
@@ -1011,6 +1037,17 @@ class _ProfileRightColumn extends StatelessWidget {
           ],
           onChanged: onUiVersionChanged,
           decoration: const InputDecoration(labelText: 'UI-Version', isDense: true),
+        ),
+        const SizedBox(height: 10),
+
+        DropdownButtonFormField<String>(
+          initialValue: catalogSort == 'most_sold' ? 'most_sold' : 'default',
+          items: const [
+            DropdownMenuItem(value: 'default', child: Text('Default')),
+            DropdownMenuItem(value: 'most_sold', child: Text('Most sold')),
+          ],
+          onChanged: onCatalogSortChanged,
+          decoration: const InputDecoration(labelText: 'Catalog sorting', isDense: true),
         ),
       ],
     );

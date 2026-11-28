@@ -619,6 +619,7 @@ class ApiService {
     String? pin,
     bool? usePinOnOrder,
     bool? hideDealerPrice,
+    String? catalogSort,
     String? bio,
     String? phoneNumber,
     String? defaultCurrency,
@@ -646,6 +647,7 @@ class ApiService {
     if (hideDealerPrice != null) {
       req.fields['hide_dealer_price'] = hideDealerPrice ? 'true' : 'false';
     }
+    if (catalogSort != null) req.fields['catalog_sort'] = catalogSort;
     if (bio != null) req.fields['bio'] = bio;
     if (phoneNumber != null) req.fields['phone_number'] = phoneNumber;
     if (defaultCurrency != null)
