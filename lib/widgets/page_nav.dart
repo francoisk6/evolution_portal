@@ -31,6 +31,9 @@ class PageNavConfig {
   /// Enable/disable the Next control (useful when selection is required).
   final bool nextEnabled;
 
+  /// Label for the Next control (e.g. 'Buy' on the final purchase step).
+  final String nextLabel;
+
   const PageNavConfig({
     this.showBack = true,
     this.backTo,
@@ -39,6 +42,7 @@ class PageNavConfig {
     this.nextTo,
     this.onNext,
     this.nextEnabled = true,
+    this.nextLabel = 'Next',
   });
 }
 

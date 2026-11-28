@@ -72,8 +72,12 @@ class CurrencyCardStrip extends ConsumerWidget {
     this.showNext = false,
     this.nextEnabled = true,
     this.nextLoading = false,
+    this.nextLabel = 'Next',
     this.onNext,
   });
+
+  /// Text shown on the Next button (e.g. 'Buy' on the final purchase step).
+  final String nextLabel;
 
   /// Whether to show the Back arrow.
   /// Home page should pass false.
@@ -107,49 +111,42 @@ class CurrencyCardStrip extends ConsumerWidget {
     final nextChip = _NextChip(
       enabled: showNext && nextEnabled && !nextLoading && onNext != null,
       loading: showNext && nextLoading,
+      label: nextLabel,
       onTap: onNext,
     );
 
     Widget wrap(List<Widget> children) {
-      // Keep currency chips centered while pinning back/next to the edges.
-      // Reserve equal slots so the center stays visually centered.
-      const navSlotW = 44.0;
+      // Currency chips centered on top; Back/Next on their own row below,
+      // pinned to the left/right edges.
       final showNav = showBack || showNext;
 
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (showNav)
-              SizedBox(
-                width: navSlotW,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: showBack ? backChip : const SizedBox.shrink(),
-                ),
-              ),
-            Expanded(
-              child: Align(
-                alignment: Alignment.center,
-                child: Wrap(
-                  alignment: WrapAlignment.center,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: children,
-                ),
+            Align(
+              alignment: Alignment.center,
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 6,
+                children: children,
               ),
             ),
-            if (showNav)
-              SizedBox(
-                width: navSlotW,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: showNext ? nextChip : const SizedBox.shrink(),
-                ),
+            if (showNav) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  if (showBack) backChip,
+                  const Spacer(),
+                  if (showNext) nextChip,
+                ],
               ),
+            ],
           ],
         ),
       );
@@ -258,10 +255,13 @@ class _BackChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: bd),
         ),
-        child: const Icon(
-          Icons.arrow_back,
-          size: 16,
-          color: red,
+        child: const Text(
+          'Back',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: red,
+          ),
         ),
       ),
     );
@@ -271,11 +271,13 @@ class _BackChip extends StatelessWidget {
 class _NextChip extends StatelessWidget {
   final bool enabled;
   final bool loading;
+  final String label;
   final Future<void> Function()? onTap;
 
   const _NextChip({
     required this.enabled,
     required this.loading,
+    required this.label,
     required this.onTap,
   });
 
@@ -318,10 +320,13 @@ class _NextChip extends StatelessWidget {
                   color: green,
                 ),
               )
-            : Icon(
-                Icons.arrow_forward,
-                size: 16,
-                color: iconColor,
+            : Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: iconColor,
+                ),
               ),
       ),
     );

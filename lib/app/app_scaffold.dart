@@ -783,6 +783,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
                 showNext: showNext,
                 nextEnabled: nextEnabled,
                 nextLoading: _navNextBusy,
+                nextLabel: cfg?.nextLabel ?? 'Next',
                 onNext: showNext ? onNext : null,
               );
             },

@@ -2071,6 +2071,7 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
           onBack: () => context.go(backTarget),
           showNext: true,
           nextEnabled: nextEnabled,
+          nextLabel: 'Buy',
           onNext: nextEnabled ? () => _submit(goHomeAfterSuccess: true) : null,
         ),
         child: GridScrollContainer(
