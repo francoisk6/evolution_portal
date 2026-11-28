@@ -139,12 +139,16 @@ class CurrencyCardStrip extends ConsumerWidget {
             ),
             if (showNav) ...[
               const SizedBox(height: 6),
-              Row(
-                children: [
-                  if (showBack) backChip,
-                  const Spacer(),
-                  if (showNext) nextChip,
-                ],
+              Padding(
+                // Inset Back/Next from the screen edges.
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    if (showBack) backChip,
+                    const Spacer(),
+                    if (showNext) nextChip,
+                  ],
+                ),
               ),
             ],
           ],
