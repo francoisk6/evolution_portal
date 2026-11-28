@@ -39,11 +39,26 @@ class _HomePageState extends ConsumerState<HomePage> {
   ScrollController _ctrlFor(int sectionId) =>
       _hCtrls.putIfAbsent(sectionId, () => ScrollController());
 
+  // Sections whose header was tapped → shown as a multi-row grid
+  // instead of the one-line horizontal scroller.
+  final Set<int> _expandedSections = <int>{};
+  static const double _gridCellMinWidth = 100; // card (84) + padding (16)
+
+  void _toggleSection(int sectionId) {
+    setState(() {
+      if (!_expandedSections.remove(sectionId)) {
+        _expandedSections.add(sectionId);
+      }
+    });
+  }
+
   String _mediaUrl(String avatar) {
     // API returns "/media/..." → make absolute using base (…/api/ → /)
     final root = AppEnv.base.replaceFirst(RegExp(r'/api/?$'), '/');
     if (avatar.startsWith('http')) {
-      return avatar.startsWith('https') ? avatar : avatar.replaceFirst('http:', 'https:');
+      return avatar.startsWith('https')
+          ? avatar
+          : avatar.replaceFirst('http:', 'https:');
     }
     return '$root${avatar.replaceFirst(RegExp(r'^/'), '')}';
   }
@@ -220,81 +235,128 @@ class _HomePageState extends ConsumerState<HomePage> {
                           final sec = filteredSections[i];
                           final isLast = i == filteredSections.length - 1;
                           final hCtrl = _ctrlFor(sec.id);
+                          final isExpanded = _expandedSections.contains(sec.id);
 
-                          return Column(
-                            children: [
-                              Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 10),
-                                child: IntrinsicHeight(
-                                  child: Row(
-                                    // Ensure left rail spans row height -> true vertical centering
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      // Vertical category label (left rail)
-                                      SizedBox(
-                                        width: 44,
-                                        child: Center(
-                                          child: RotatedBox(
-                                            quarterTurns: 3,
-                                            child: Text(
-                                              sec.name.toUpperCase(),
-                                              overflow: TextOverflow.ellipsis,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .labelSmall
-                                                  ?.copyWith(
-                                                    letterSpacing: 1.2,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .onSurface
-                                                      ..withValues(alpha: .65),
-                                                  ),
+                          Widget cardFor(HomeDetail d) => _GroupCard(
+                                title: d.name,
+                                imageUrl: _mediaUrl(d.avatar),
+                                onTap: () {
+                                  context.go(
+                                    '${R.onlineBrands}/${d.id}',
+                                  );
+                                },
+                              );
+
+                          return LayoutBuilder(
+                            builder: (ctx, constraints) => Column(
+                              children: [
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 10),
+                                  child: IntrinsicHeight(
+                                    child: Row(
+                                      // Ensure left rail spans row height -> true vertical centering
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        // Vertical category label (left rail)
+                                        // Tap → toggle one-line row / multi-row grid.
+                                        InkWell(
+                                          onTap: () => _toggleSection(sec.id),
+                                          canRequestFocus: false,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          child: SizedBox(
+                                            width: 44,
+                                            child: Center(
+                                              child: RotatedBox(
+                                                quarterTurns: 3,
+                                                child: Text(
+                                                  sec.name.toUpperCase(),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .labelSmall
+                                                      ?.copyWith(
+                                                        letterSpacing: 1.2,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .onSurface
+                                                          ..withValues(
+                                                              alpha: .65),
+                                                      ),
+                                                ),
+                                              ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 8),
+                                        const SizedBox(width: 8),
 
-                                      // One-line horizontal scroller with cards
-                                      Expanded(
-                                        child: SingleChildScrollView(
-                                          controller: hCtrl,
-                                          scrollDirection: Axis.horizontal,
-                                          physics:
-                                              const BouncingScrollPhysics(),
-                                          child: Row(
-                                            children: sec.details.map((d) {
-                                              final avatar =
-                                                  _mediaUrl(d.avatar);
-                                              return Padding(
-                                                key: ValueKey(d.id),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 8,
+                                        Expanded(
+                                          child: isExpanded
+                                              // Expanded: multi-row grid, as many
+                                              // cards per row as the width fits.
+                                              ? Builder(builder: (_) {
+                                                  // Row width minus rail (44) + gap (8).
+                                                  final gridW = (constraints
+                                                              .maxWidth -
+                                                          52)
+                                                      .clamp(
+                                                          0.0, double.infinity);
+                                                  final fit = (gridW /
+                                                          _gridCellMinWidth)
+                                                      .floor();
+                                                  final cols =
+                                                      fit < 1 ? 1 : fit;
+                                                  final cellW = gridW / cols;
+                                                  return Wrap(
+                                                    runSpacing: 12,
+                                                    children: sec.details
+                                                        .map((d) => SizedBox(
+                                                              key: ValueKey(
+                                                                  d.id),
+                                                              width: cellW,
+                                                              child: Center(
+                                                                child:
+                                                                    cardFor(d),
+                                                              ),
+                                                            ))
+                                                        .toList(),
+                                                  );
+                                                })
+                                              // Collapsed: one-line horizontal scroller with cards
+                                              : SingleChildScrollView(
+                                                  controller: hCtrl,
+                                                  scrollDirection:
+                                                      Axis.horizontal,
+                                                  physics:
+                                                      const BouncingScrollPhysics(),
+                                                  child: Row(
+                                                    children:
+                                                        sec.details.map((d) {
+                                                      return Padding(
+                                                        key: ValueKey(d.id),
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 8,
+                                                        ),
+                                                        child: cardFor(d),
+                                                      );
+                                                    }).toList(),
+                                                  ),
                                                 ),
-                                                child: _GroupCard(
-                                                  title: d.name,
-                                                  imageUrl: avatar,
-                                                  onTap: () {
-                                                    context.go(
-                                                      '${R.onlineBrands}/${d.id}',
-                                                    );
-                                                  },
-                                                ),
-                                              );
-                                            }).toList(),
-                                          ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                              if (!isLast) const Divider(height: 16),
-                            ],
+                                if (!isLast) const Divider(height: 16),
+                              ],
+                            ),
                           );
                         },
                       ),
