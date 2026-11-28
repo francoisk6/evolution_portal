@@ -48,6 +48,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       if (session.loggedIn && loggingIn) return R.home;
       // Root path has no route — redirect to the correct destination.
       if (path == '/' || path.isEmpty) return session.loggedIn ? R.home : R.login;
+      // Batch refill is opt-in per user; the server returns 403 otherwise.
+      if (session.loggedIn &&
+          path.startsWith(R.adminBatchRefill) &&
+          !session.batchRefillEnabled) {
+        return R.home;
+      }
       return null;
     },
     refreshListenable:

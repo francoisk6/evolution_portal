@@ -15,6 +15,7 @@ class SessionState extends ChangeNotifier {
   String _workspaceTiers = 'dealers';
   bool _isStaff = false;
   bool _isSuperuser = false;
+  bool _batchRefillEnabled = false;
   String _username = '';
 
   bool get ready => _ready;
@@ -51,6 +52,8 @@ class SessionState extends ChangeNotifier {
   bool get isStaff => _isStaff;
   bool get isSuperuser => _isSuperuser;
   bool get isAdmin => _isStaff || _isSuperuser;
+  /// Per-user opt-in (Profile.batch_refill_enabled), set by a superuser.
+  bool get batchRefillEnabled => _batchRefillEnabled;
   String get username => _username;
 
   SessionState() {
@@ -83,6 +86,8 @@ class SessionState extends ChangeNotifier {
     if (tiers.isNotEmpty) _workspaceTiers = tiers;
     _isStaff = _asBool(data['is_staff'] ?? profileMap['is_staff']);
     _isSuperuser = _asBool(data['is_superuser'] ?? profileMap['is_superuser']);
+    _batchRefillEnabled = _asBool(
+        profileMap['batch_refill_enabled'] ?? data['batch_refill_enabled']);
     final u = (data['username'] ?? profileMap['username'] ?? '').toString().trim();
     if (u.isNotEmpty) _username = u;
   }
@@ -202,6 +207,7 @@ class SessionState extends ChangeNotifier {
     _workspaceTiers = 'dealers';
     _isStaff = false;
     _isSuperuser = false;
+    _batchRefillEnabled = false;
     notifyListeners();
   }
 }
